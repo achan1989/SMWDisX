@@ -2286,7 +2286,7 @@ SampleTable:
 ORG $000000
 
 VRam_M7Tilemap:
-VRam_L1Tiles: 
+VRam_L1Tiles:
 VRam_L2Tiles:
 VRam_GFX_FG1: skip 2048
 VRam_GFX_FG2: skip 2048

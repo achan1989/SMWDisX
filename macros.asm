@@ -84,7 +84,7 @@ macro insert_empty(j, u, ss, e0, e1)
             else;if !_VER == !__VER_E1
                 !b = readfile1("empty/E1_fill.bin", snestopc(?start)+!i)
             endif
-            
+
             db !b
             !i #= !i+1
         endif
