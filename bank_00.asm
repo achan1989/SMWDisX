@@ -194,6 +194,7 @@ I_NMI:                                        ; NMI routine.
     SEI                                       ; Disable interrupts to prevent interrupting an interrupt.
     PHP                                       ;\ 
     REP #$30                                  ;| AXY->16
+    ; Mode AXY=16                             ;|
     PHA                                       ;| Preserve values to be restored at the end.
     PHX                                       ;| Note: direct page and $00-$04 are not preserved!
     PHY                                       ;|
@@ -201,6 +202,7 @@ I_NMI:                                        ; NMI routine.
     PHK                                       ;
     PLB                                       ;
     SEP #$30                                  ; AXY->8
+    ; Mode AXY=8
     LDA.W HW_RDNMI                            ; Read to clear the n flag.
     LDA.W SPCIO2                              ;\ If playing music in $1DFB, branch to load it.
     BNE +                                     ;/
@@ -2043,7 +2045,7 @@ DrawOneStartScreenLetter:                     ; Subroutine to upload loading scr
     STA.W OAMTileYPos+4*(!SrtOAMSlot+1),Y     ;/
   + RTS
 
-CODE_00922F:                                  ; Upload palettes from $0703 to CGRAM.
+UploadPalettesToCGRAM:                        ; Upload palettes from $0703 to CGRAM.
     STZ.W MainPalette                         ;\ 
     STZ.W MainPalette+1                       ;| Clear first color of palette data.
     STZ.W HW_CGADD                            ;/
@@ -2240,7 +2242,7 @@ NintendoTile:                                 ; Tilemap for the "Nintendo Presen
 GM00LoadPresents:                             ; Game Mode 00 - Load Nintendo Presents
     JSR ClearOutLayer3                        ; Clean out Layer 3.
     JSR SetUpScreen                           ; Set up various registers (screen mode, CGADDSUB, windows...).
-    JSR CODE_00A993                           ; Load Layer 3 GFX.
+    JSR LoadLayer3Graphics                    ; Load Layer 3 GFX (text tiles?)
     LDY.B #4*(4-1)                            ;\ Load Nintendo Presents logo
     LDX.B #4-1                                ;|
   - LDA.W NintendoPos,X                       ;|
@@ -2269,7 +2271,7 @@ CODE_0093CA:                                  ;
     JSR LoadPalette                           ; Load palettes from ROM to RAM.
     STZ.W BackgroundColor                     ;\ Black background
     STZ.W BackgroundColor+1                   ;/
-    JSR CODE_00922F                           ;
+    JSR UploadPalettesToCGRAM                 ;
     STZ.W BlinkCursorPos                      ; Set menu pointer position to 0
     LDX.B #!HW_Through_OBJ                    ; Enable sprites, disable layers
     LDY.B #!HW_Through_BG3                    ; Set Layer 3 to subscreen
@@ -2393,7 +2395,7 @@ LoadCastleCutscene:                           ; Loading castle cutscene.
     INC.W IsCarryingItem
   + JSR UploadSpriteGFX                       ; Upload GFX files.
     JSR LoadPalette                           ; Load palettes from ROM to RAM.
-    JSR CODE_00922F                           ; Upload palettes to CGRAM.
+    JSR UploadPalettesToCGRAM                 ; Upload palettes to CGRAM.
     LDX.B #11
   - STZ.B Layer1XPos,X
     DEX
@@ -2490,7 +2492,7 @@ GM1DLoadThankYou:                             ; Game Mode 1D - Ending: Load Yosh
     DEC.W GameMode                            ;
     JSR TurnOffIO                             ; Turn off the screen.
     JSR ClearOutLayer3                        ; Clean out Layer 3.
-    JSR CODE_00A993                           ; Load Layer 3 GFX.
+    JSR LoadLayer3Graphics                    ; Load Layer 3 GFX (text tiles?)
     JSL CODE_0CA3C9                           ; Initialize misc data?
     JSR CODE_00961E                           ; Set up screen data (CGADSUB/etc.)
 
@@ -2538,7 +2540,7 @@ GM23PrepEnemyList:                            ; Game Mode 23 - Load Enemy Credit
     BPL -
     
 CODE_009612:
-  + JSR CODE_00922F                           ; Upload palettes to CGRAM.
+  + JSR UploadPalettesToCGRAM                 ; Upload palettes to CGRAM.
     JSR SetupCreditsBGHDMA                    ; Initialize HDMA table.
     JSR LoadScrnImage                         ; Upload tilemap data from $12.
     JSR GM25EnemyList
@@ -2581,7 +2583,7 @@ GM27LoadTheEnd:                               ; Game Mode 27 - Ending: Load The 
     STA.W MainPalette+2*$F2,X
     DEX
     BPL -
-    JSR CODE_00922F                           ; Upload palettes to CGRAM.
+    JSR UploadPalettesToCGRAM                 ; Upload palettes to CGRAM.
     LDA.B #OtherStripes-StripeImages+$0C      ;
     STA.B StripeImage                         ;
     JSR LoadScrnImage                         ; Upload tilemap data from $12.
@@ -3078,7 +3080,7 @@ GM04PrepTitleScreen:                          ; Game Mode 04 - Prepare Title Scr
     STA.B StripeImage                         ;| Upload the title screen stripe image.
     JSR LoadScrnImage                         ;/
     JSR CODE_00ADA6                           ; Load palettes to RAM.
-    JSR CODE_00922F                           ; Upload palettes to CGRAM.
+    JSR UploadPalettesToCGRAM                 ; Upload palettes to CGRAM.
     JSL CODE_04F675                           ; Initialize overworld sprites.
     LDA.B #!IRQNMI_Cutscenes                  ;
     STA.W IRQNMICommand                       ;
@@ -4335,7 +4337,7 @@ CODE_00A11B:
     LDY.B #$14
     JSL PrepareGraphicsFile
     JSR CODE_00AD25
-    JSR CODE_00922F
+    JSR UploadPalettesToCGRAM
     LDA.B #$06                                ; \ Load overworld border
     STA.B StripeImage                         ; |
     JSR LoadScrnImage                         ; /
@@ -4871,7 +4873,7 @@ CODE_00A5B9:
     JSR CODE_00A5F9
     JSR DisableHDMA
     JSR CODE_009860
-  + JSR CODE_00922F
+  + JSR UploadPalettesToCGRAM
     JSR KeepGameModeActive
     JSR UpdateStatusBar
     REP #$30                                  ; AXY->16
@@ -5284,13 +5286,13 @@ OBJECTGFXLIST:
     db $14,$17,$19,$2C
     db $19,$17,$1B,$18
 
-CODE_00A993:
+LoadLayer3Graphics:
     STZ.W HW_VMADD                            ; \
     LDA.B #$40                                ; |Set "Address for VRAM Read/Write" to x4000
     STA.W HW_VMADD+1                          ; /
     LDA.B #$03
     STA.B _F
-    LDA.B #$28
+    LDA.B #$28                                ; GFX28_HUDTiles ??
     STA.B _E
 CODE_00A9A3:
     LDA.B _E
@@ -6257,7 +6259,7 @@ CODE_00B888:
     STY.B _0                                  ; |Store the address 7E/2000 at $00-$02
     LDA.B #MarioGraphics>>16&$7F              ; |
     STA.B _2                                  ; /
-    JSR CODE_00B8DE
+    JSR GraphicsUncompress_EntryB
     LDA.B #MarioGraphics>>16&$7F              ; \
     STA.B GraphicsUncompPtr+2                 ; |
     REP #$30                                  ; |AXY->16, Store the address 7E/ACFE at $8D-$8F
@@ -6280,59 +6282,85 @@ CODE_00B8C4:
     LDA.L MarioGraphics,X
     STA.B [GraphicsUncompPtr]
     DEX
-    BMI CODE_00B8D7
+    BMI GraphicsUncompress_EntryA
     DEC.B GraphicsUncompPtr
     DEC.B GraphicsUncompPtr
     DEY
     BNE CODE_00B8C4
     BRA CODE_00B8AD
 
-CODE_00B8D7:
+GraphicsUncompress_EntryA:
     LDA.W #$8000
     STA.B GraphicsCompPtr
     SEP #$20                                  ; A->8
-CODE_00B8DE:
+
+; In one example, called with _0 = $7EAD00 and GraphicsCompPtr = GFX28 (i.e. GFX28_HUDTiles).
+; Y will hold the output offset.
+; ReadByte reads a byte from GraphicsCompPtr and increments the pointer, stores the byte in A.
+; Mode AXY=8
+GraphicsUncompress_EntryB:
     REP #$10                                  ; XY->16
+    ; Mode A=8 XY=16
     LDY.W #$0000                              ; \
-CODE_00B8E3:
+GraphicsUncompress_ReadChunkHeader:
     JSR ReadByte                              ; |
     CMP.B #$FF                                ; |If the next byte is xFF, return.
     BNE +                                     ; |Compressed graphics files ends with xFF IIRC
     SEP #$10                                  ; | XY->8
     RTS                                       ; /
 
+; Start of a block.
+; One header byte that gives 3 command bits and 5 length bits: CCCLLLLL
+; Except for the special case where the command is 111, then there is a second header byte
+; giving 10 length bits: 111CCCLL LLLLLLLL
+
+    ; Mode A=8 XY=16
   + STA.B GraphicsUncompPtr+2
     AND.B #$E0
     CMP.B #$E0
-    BEQ CODE_00B8FF
-    PHA
-    LDA.B GraphicsUncompPtr+2
-    REP #$20                                  ; A->16
-    AND.W #$001F
-    BRA +
+    BEQ GraphicsUncompress_LongLength
 
-CODE_00B8FF:
+    ; For normal length.
+    PHA                                       ; Stacked A: 3 command bits, followed by zeroes
+    LDA.B GraphicsUncompPtr+2                 ; \
+    REP #$20                                  ; | A->16
+    ; Mode AXY=16                             ; | A = 5 bit command length
+    AND.W #$001F                              ; /
+    BRA GraphicsUncompress_DecodeCommand
+
+GraphicsUncompress_LongLength:
+    ; Mode A=8 XY=16
     LDA.B GraphicsUncompPtr+2
     ASL A
     ASL A
     ASL A
     AND.B #$E0
-    PHA
-    LDA.B GraphicsUncompPtr+2
-    AND.B #$03
-    XBA
-    JSR ReadByte
+    PHA                                       ; Stacked A: 3 command bits, followed by zeroes
+    LDA.B GraphicsUncompPtr+2                 ; \ A = 10 bit command length
+    AND.B #$03                                ; |
+    XBA                                       ; |
+    JSR ReadByte                              ; /
     REP #$20                                  ; A->16
-  + INC A
-    STA.B GraphicsUncompPtr
+
+GraphicsUncompress_DecodeCommand:
+    ; Mode AXY=16
+    INC A                                     ; \
+    STA.B GraphicsUncompPtr                   ; / GraphicsUncompPtr[0:1] = command length
     SEP #$20                                  ; A->8
-    PLA
-    BEQ CODE_00B930
-    BMI CODE_00B966
-    ASL A
-    BPL CODE_00B93F
-    ASL A
-    BPL CODE_00B94C
+    ; Mode A=8 XY=16
+    PLA                                       ; A = 3 command bits, followed by zeroes
+    BEQ GraphicsUncompress_Command000
+    BMI GraphicsUncompress_Command1xx
+    ASL A                                     ; 0xx
+    BPL GraphicsUncompress_Command001
+    ASL A                                     ; 01x
+    BPL GraphicsUncompress_Command010
+
+; Command 011 "increasing fill"
+; The command is followed by a byte.
+; Write this byte length+1 times into the output, but inc the byte after every write.
+GraphicsUncompress_Command011:
+    ; Mode A=8 XY=16
     JSR ReadByte
     LDX.B GraphicsUncompPtr
   - STA.B [_0],Y
@@ -6340,67 +6368,82 @@ CODE_00B8FF:
     INY
     DEX
     BNE -
-    JMP CODE_00B8E3
+    JMP GraphicsUncompress_ReadChunkHeader
 
-CODE_00B930:
+; Command 000 "direct copy"
+; Copy length+1 bytes following the command byte.
+GraphicsUncompress_Command000:
+    ; Mode A=8 XY=16
     JSR ReadByte
     STA.B [_0],Y
     INY
     LDX.B GraphicsUncompPtr
     DEX
     STX.B GraphicsUncompPtr
-    BNE CODE_00B930
-    BRA CODE_00B8E3
+    BNE GraphicsUncompress_Command000
+    BRA GraphicsUncompress_ReadChunkHeader
 
-CODE_00B93F:
+; Command 001 "byte repeat"
+; The command is followed by a byte.
+; Write this byte length+1 times into the output.
+GraphicsUncompress_Command001:
+    ; Mode A=8 XY=16
     JSR ReadByte
     LDX.B GraphicsUncompPtr
   - STA.B [_0],Y
     INY
     DEX
     BNE -
-    BRA CODE_00B8E3
+    BRA GraphicsUncompress_ReadChunkHeader
 
-CODE_00B94C:
+; Command 001 "word repeat"
+; The command is followed by two bytes.
+; Write the first byte, write the second byte, write the first byte...
+; until length+1 bytes have been written.
+GraphicsUncompress_Command010:
+    ; Mode A=8 XY=16
     JSR ReadByte
     XBA
     JSR ReadByte
     LDX.B GraphicsUncompPtr
-CODE_00B955:
+  - XBA
+    STA.B [_0],Y
+    INY
+    DEX
+    BEQ +
     XBA
     STA.B [_0],Y
     INY
     DEX
-    BEQ CODE_00B963
-    XBA
-    STA.B [_0],Y
-    INY
-    DEX
-    BNE CODE_00B955
-CODE_00B963:
-    JMP CODE_00B8E3
+    BNE -
+  + JMP GraphicsUncompress_ReadChunkHeader
 
-CODE_00B966:
-    JSR ReadByte
-    XBA
-    JSR ReadByte
+; Command 1xx "repeat"
+; After the command byte is a 2 byte index after the command.
+; Copy length+1 bytes from the output buffer; read starts from the given index.
+GraphicsUncompress_Command1xx:
+    ; Mode A=8 XY=16
+    JSR ReadByte                              ; \ A = index into the output buffer
+    XBA                                       ; | (stored in ROM as big-endian, then fixed-up)
+    JSR ReadByte                              ; /
 if ver_has_rev_gfx(!_VER)                     ;\==================== J & E1 ===================
     XBA                                       ;! ThinkingFace
 endif                                         ;/===============================================
     TAX
-  - PHY
-    TXY
-    LDA.B [_0],Y
-    TYX
-    PLY
-    STA.B [_0],Y
-    INY
-    INX
+  - PHY                                       ; Stacked Y: the destination index in the output buffer
+    TXY                                       ; Y = the source index into the output buffer
+    LDA.B [_0],Y                              ; \ outbuf[dst] = outbuf[src]
+    TYX                                       ; |
+    PLY                                       ; |
+    STA.B [_0],Y                              ; /
+    INY                                       ; Y = ++dst
+    INX                                       ; X = ++src
     REP #$20                                  ; A->16
-    DEC.B GraphicsUncompPtr
+    DEC.B GraphicsUncompPtr                   ; Command length dec
     SEP #$20                                  ; A->8
+    ; Mode A=8 XY=16
     BNE -
-    JMP CODE_00B8E3
+    JMP GraphicsUncompress_ReadChunkHeader
 
 ReadByte:
     LDA.B [GraphicsCompPtr]                   ; Read the byte
@@ -6568,7 +6611,10 @@ GFXFilesBank:
     db GFX30>>16&$7F
     db GFX31>>16&$7F
 
+; Call with Y = a graphics file ID, e.g. GFX28_HUDTiles
+; Uncompresses the graphics to a buffer at $7EAD00
 PrepareGraphicsFile:
+    ; Mode AXY=8
     PHB
     PHY
     PHK
@@ -6584,8 +6630,8 @@ PrepareGraphicsFile:
     LDA.B #$AD
     STA.B _1
     LDA.B #$7E
-    STA.B _2
-    JSR CODE_00B8DE
+    STA.B _2                                  ; Going to do something with _0 = $7EAD00
+    JSR GraphicsUncompress_EntryB
     PLY
     PLB
     RTL
