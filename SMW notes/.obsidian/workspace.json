@@ -1,0 +1,211 @@
+{
+  "main": {
+    "id": "9846eb6ada0eacf5",
+    "type": "split",
+    "children": [
+      {
+        "id": "c6ee2af0f34d7c05",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "2bad102710cb9d38",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+                "mode": "source",
+                "backlinks": true,
+                "source": true
+              }
+            },
+            "group": "eb0ee0d473125f98"
+          },
+          {
+            "id": "0b73ca138cb9c80e",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Graphics/Variables/Var BackgroundColor.md",
+                "mode": "source",
+                "backlinks": true,
+                "source": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "6567f907ddfabc3f",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "64410687912f8d8f",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+                "mode": "preview",
+                "backlinks": true,
+                "source": true
+              }
+            },
+            "group": "eb0ee0d473125f98"
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "9a275cd1f13d39a2",
+    "type": "split",
+    "children": [
+      {
+        "id": "fd8abbd89de5952b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "5acb038350526ddd",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical"
+              }
+            }
+          },
+          {
+            "id": "cc5153a75ab3bdc9",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "lag",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              }
+            }
+          },
+          {
+            "id": "d56a71cb7731905c",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {}
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "65b16481e4506c6d",
+    "type": "split",
+    "children": [
+      {
+        "id": "18d357ac53cf202c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "ae900211de276ed6",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              }
+            }
+          },
+          {
+            "id": "396cfe917e19ff72",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              }
+            }
+          },
+          {
+            "id": "b5b335d0aa5bc9fe",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true
+              }
+            }
+          },
+          {
+            "id": "e7d3da214d9617f1",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md"
+              }
+            }
+          }
+        ],
+        "currentTab": 2
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false
+    }
+  },
+  "active": "2bad102710cb9d38",
+  "lastOpenFiles": [
+    "Graphics/Variables/Var BackgroundColor.md",
+    "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+    "Graphics/Variables/Var PaletteIndexTable.md",
+    "Graphics/Functions/LoadPalette.md",
+    "NMI/Normal NMI.md",
+    "Graphics/Functions/UploadPalettesToCGRAM.md",
+    "Unsorted vars",
+    "Graphics/Graphics info.md",
+    "Startup sequence.md",
+    "Unsorted vars/Var LagFlag.md",
+    "Game modes/GM00LoadPresents.md",
+    "NMI/Common NMI entry.md",
+    "Graphics/Functions/SetUpScreen.md",
+    "Game modes/GM01Presents.md",
+    "NMI",
+    "Var PotatoThing.md",
+    "Graphics/Functions/OAMResetRoutine.md",
+    "Graphics/Functions/LoadLayer3Graphics.md",
+    "Graphics/Variables",
+    "Graphics/Functions",
+    "Game modes",
+    "Graphics",
+    "create a link.md",
+    "Welcome.md"
+  ]
+}
