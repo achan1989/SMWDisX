@@ -42,7 +42,7 @@ I_RESET:
     JSR ClearMemory                           ; Clear out $0000-$1FFF and $7F837B/D.
     JSR UploadSamples                         ; Upload SPC samples.
     JSR WindowDMASetup                        ; Set up DMA for window settings.
-    LDA.B #(VRam_OBJTiles>>13)|!HW_OBJ_Size_8_16
+    LDA.B #(VRam_OBJTiles>>13)|!HW_OBJ_Size_8_16  ; Sprite tiles at 0x6000 in VRAM.
     STA.W HW_OBJSEL                           ; Set OAM character sizes to be 8x8 and 16x16.
     INC.B LagFlag                             ;
 
@@ -236,21 +236,24 @@ I_NMI:                                        ; NMI routine.
     BPL RegularLevelNMI                       ;|
     JMP Mode7NMI                              ;/ Otherwise, go to mode 7 routines.
 
-RegularLevelNMI:                              ;\ Set color math on all layers in $40 but 3.
-    LDA.B ColorSettings                       ;|
-    AND.B #~!HW_CMath_BG3                     ;/
-    STA.W HW_CGADSUB                          ;\ Mode 1 with layer 3 priority.
-    LDA.B #!HW_BG_BG3Pri|!HW_BG_Mode1         ;/
-    STA.W HW_BGMODE                           ;\
-    LDA.B LagFlag                             ;|
+RegularLevelNMI:                              ; For IRQNMI_Standard, IRQNMI_Cutscenes, IRQNMI_Overworld.
+    ; Mode AXY=8
+    LDA.B ColorSettings                       ;\ Set color math on all layers in $40 but 3.
+    AND.B #~!HW_CMath_BG3                     ;|
+    STA.W HW_CGADSUB                          ;/
+    LDA.B #!HW_BG_BG3Pri|!HW_BG_Mode1         ;\ Mode 1 with layer 3 priority.
+    STA.W HW_BGMODE                           ;/
+    LDA.B LagFlag                             ;\
     BEQ +                                     ;| If the game is lagging, skip updating stuff like sprite OAM and controller data.
     LDA.W IRQNMICommand                       ;| If in a special level, skip updating layer positions too.
     LSR A                                     ;|
     BEQ NotSpecialLevelNMI                    ;/
     JMP SpecialLevelNMI                       ;
 
+.NotLagging:
+    ; Mode AXY=8
   + INC.B LagFlag                             ; Allow the game loop to run after NMI.
-    JSR CODE_00A488                           ; Upload palette to CGRAM.
+    JSR UploadPaletteTableToCGRAM             ; Upload palette to CGRAM.
     LDA.W IRQNMICommand                       ;\\
     LSR A                                     ;|| Skip down if not either in a regular level, loading message (MARIO START), title screen, or castle cutscene.
     BNE CODE_008222                           ;|/
@@ -373,7 +376,7 @@ CODE_0082D4:
     BCS +                                     ;|
 CODE_0082E8:                                  ;|
     JSR DrawStatusBar                         ;/
-  + JSR CODE_00A488                           ; Upload palette to CGRAM.
+  + JSR UploadPaletteTableToCGRAM             ; Upload palette to CGRAM.
     JSR LoadScrnImage                         ; Upload tilemap data from $12.
     JSR DoSomeSpriteDMA                       ; Upload OAM.
     JSR ControllerUpdate                      ; Get controller data.
@@ -2047,12 +2050,12 @@ DrawOneStartScreenLetter:                     ; Subroutine to upload loading scr
 
 UploadPalettesToCGRAM:                        ; Upload palettes from $0703 to CGRAM.
     STZ.W MainPalette                         ;\
-    STZ.W MainPalette+1                       ;| Clear first color of palette data.
-    STZ.W HW_CGADD                            ;/
+    STZ.W MainPalette+1                       ;/ Clear first color of palette data.
+    STZ.W HW_CGADD                            ; dst = the start of all CGRAM (colour 0 in palette 0)
     LDX.B #6                                  ;\ Set up and enable DMA on channel 2.
-  - LDA.W MainPaletteDMAData,X                ;| $4320: Increment, one register write once.
+  - LDA.W MainPaletteDMAData,X                ;| $4320: CPU->PPU, increment src, one register write once.
     STA.W HW_DMAPARAM+$20,X                   ;| $4321: Destination is $2122 (CGRAM).
-    DEX                                       ;| $4322: Source is $000703.
+    DEX                                       ;| $4322: Source is MainPalette $000703.
     BPL -                                     ;| $4325: Write x200 bytes.
     LDA.B #!Ch2                               ;|
     STA.W HW_MDMAEN                           ;/
@@ -2091,10 +2094,10 @@ WindowDMAData:
 WindowDMASizes:
 if ver_is_lores(!_VER)                        ;\================ J, U, SS, & E0 ===============
     db !ScreenHeight+16                       ;! Screen is split into two halves
-    dw WindowTable                            ;! Each $F0 lines long
-    db !ScreenHeight+16                       ;!
-    dw WindowTable+!ScreenHeight              ;!
-    db 0                                      ;!
+    dw WindowTable                            ;! Each 112 lines long
+    db !ScreenHeight+16                       ;! The C bit is set, so there's a word of data per
+    dw WindowTable+!ScreenHeight              ;! line (write a word from an increasing index in
+    db 0                                      ;! the table every scanline).
 else                                          ;<======================= E1 ====================
     db !ScreenHeight+8                        ;! Screen is split into two halves
     dw WindowTable                            ;! Each $F8 lines long
@@ -2251,7 +2254,7 @@ GM00LoadPresents:                             ; Game Mode 00 - Load Nintendo Pre
     STA.W OAMTileYPos,Y                       ;|
     LDA.W NintendoTile,X                      ;|
     STA.W OAMTileNo,Y                         ;|
-    LDA.B #%00110000                          ;|
+    LDA.B #%00110000                          ;| Not flipped, highest priority, palette 0, high bit of tile number = 0
     STA.W OAMTileAttr,Y                       ;|
     DEY #4                                    ;|
     DEX                                       ;|
@@ -2269,7 +2272,7 @@ CODE_0093CA:                                  ;
     STA.W MosaicDirection                     ;
     STZ.W SpritePalette                       ; Sprite palette setting = 0
     JSR LoadPalette                           ; Load palettes from ROM to RAM.
-    STZ.W BackgroundColor                     ;\ Black background
+    STZ.W BackgroundColor                     ;\ Override the default background, set black.
     STZ.W BackgroundColor+1                   ;/
     JSR UploadPalettesToCGRAM                 ;
     STZ.W BlinkCursorPos                      ; Set menu pointer position to 0
@@ -4708,55 +4711,71 @@ CODE_00A436:
   + RTS
 
 
-DATA_00A47F:
+DATA_PaletteTableLookup:
     dl DynPaletteTable
     dl CopyPalette
     dl MainPalette
 
-CODE_00A488:
+; Upload the contents of the dynamic palette table to CGRAM, if the table is in use.
+; Upload the BackgroundColor to the PPU as the colour math fixed colour.
+UploadPaletteTableToCGRAM:
+    ; Mode AXY=8
     LDY.W PaletteIndexTable
-    LDX.W DATA_00A47F+2,Y
-    STX.B _2
+    LDX.W DATA_PaletteTableLookup+2,Y         ;  X = bank number of the chosen palette table.
+    STX.B _2                                  ; _2 = bank number of the chosen palette table.
     STZ.B _1
-    STZ.B _0
+    STZ.B _0                                  ; _0 = long address 0x<bank>0000
     STZ.B _4
-    LDA.W DATA_00A47F+1,Y
+    LDA.W DATA_PaletteTableLookup+1,Y
     XBA
-    LDA.W DATA_00A47F,Y
+    LDA.W DATA_PaletteTableLookup,Y           ; A = short address of the chosen palette table.
     REP #$10                                  ; XY->16
-    TAY
-CODE_00A4A0:
-    LDA.B [_0],Y
-    BEQ CODE_00A4CF
-    STX.W HW_DMAADDR+$22
-    STA.W HW_DMACNT+$20
-    STA.B _3
-    STZ.W HW_DMACNT+$21
-    INY
-    LDA.B [_0],Y
-    STA.W HW_CGADD
+    ; Mode A=8 XY=16
+    TAY                                       ; Y = short address of the chosen palette table.
+.ProcessEntry:
+    ; Mode A=8 XY=16
+    LDA.B [_0],Y                              ; Read the first byte of the chosen palette table.
+    BEQ .End                                  ; If 0 there is nothing more to do. This should always be the case for
+                                              ; PaletteTableUse_Main (this chooses MainPalette, where the first word is always 0)
+                                              ; and PaletteTableUse_Copy (this chooses CopyPalette, which ditto?).
+    ; For PaletteTableUse_Dynamic which chooses DynPaletteTable. It stores a list of entries of colors to upload to CGRAM.
+    ; Each entry has a 2 byte header.
+    ; Header byte 1 = number of bytes to upload in this entry.
+    ; Header byte 2 = CGRAM word address to upload this entry.
+    ; Then followed by n bytes of data = the colors to upload (2 bytes per colour).
+    ; Using DMA channel 2.
+    STX.W HW_DMAADDR+$22                      ;  DMA src = <bank>_????
+    STA.W HW_DMACNT+$20                       ;\ DMA len = header byte 1
+    STA.B _3                                  ;|   _3 = header byte 1
+    STZ.W HW_DMACNT+$21                       ;/
+    INY                                       ;\ Set CGRAM dst address as header byte 2.
+    LDA.B [_0],Y                              ;|
+    STA.W HW_CGADD                            ;/
     REP #$20                                  ; A->16
-    LDA.W #$2200
-    STA.W HW_DMAPARAM+$20
-    INY
+    ; Mode AXY=16
+    LDA.W #$2200                              ; DMA config = !HW_DMA_AtoB | !HW_DMA_ABusInc | !HW_DMA_1Byte1Addr
+    STA.W HW_DMAPARAM+$20                     ; DMA dst = HW_CGDATA
+    INY                                       ; Y = address of colour data
     TYA
-    STA.W HW_DMAADDR+$20
-    CLC
-    ADC.B _3
-    TAY
+    STA.W HW_DMAADDR+$20                      ; DMA src = <bank>_<address of colour data>
+    CLC                                       ;\ Move Y to the next entry in the dynamic palette table.
+    ADC.B _3                                  ;|
+    TAY                                       ;/
     SEP #$20                                  ; A->8
+    ; Mode A=8 XY=16
     LDA.B #$04
-    STA.W HW_MDMAEN
-    BRA CODE_00A4A0
-
-CODE_00A4CF:
+    STA.W HW_MDMAEN                           ; Do the DMA transfer.
+    BRA .ProcessEntry
+.End:
+    ; Mode A=8 XY=16
     SEP #$10                                  ; XY->8
-    JSR CODE_00AE47
-    LDA.W PaletteIndexTable
-    BNE +
-    STZ.W DynPaletteIndex
-    STZ.W DynPaletteTable
-  + STZ.W PaletteIndexTable
+    ; Mode AXY=8
+    JSR UploadBackgroundColor
+    LDA.W PaletteIndexTable                   ;\ If PaletteTableUse_Dynamic, empty the dynamic palette table.
+    BNE +                                     ;|
+    STZ.W DynPaletteIndex                     ;|
+    STZ.W DynPaletteTable                     ;/
+  + STZ.W PaletteIndexTable                   ; Default to PaletteTableUse_Dynamic for the next frame.
   - RTS
 
 CODE_00A4E3:
@@ -5286,35 +5305,40 @@ OBJECTGFXLIST:
     db $14,$17,$19,$2C
     db $19,$17,$1B,$18
 
+;------------------------
+; Decompress the layer 3 tile graphics and load them into VRam_L3Tiles.
+; GFX28_HUDTiles, GFX29_TitleScreen, GFX2A_MessageTiles, GFX2B_CastleCrusher
+;-----------------------
 LoadLayer3Graphics:
     STZ.W HW_VMADD                            ; \
-    LDA.B #$40                                ; |Set "Address for VRAM Read/Write" to x4000
+    LDA.B #$40                                ; |Set "Address for VRAM Read/Write" to x4000 (VRam_L3Tiles)
     STA.W HW_VMADD+1                          ; /
     LDA.B #$03
     STA.B _F
-    LDA.B #$28                                ; GFX28_HUDTiles ??
+    LDA.B #$28                                ; Start with GFX28_HUDTiles
     STA.B _E
-CODE_00A9A3:
+.LoadOneGfxFile:
     LDA.B _E
     TAY
-    JSL PrepareGraphicsFile
+    JSL PrepareGraphicsFile                   ; Uncompresses the selected GFX into [_0]
     REP #$30                                  ; AXY->16
-    LDX.W #$03FF
-    LDY.W #$0000
-  - LDA.B [_0],Y
-    STA.W HW_VMDATA
-    INY
-    INY
-    DEX
-    BPL -
+    LDX.W #$03FF                              ; \ Transfer 0x400 words: 2 KB, enough for 32 tiles of 4bpp.
+    LDY.W #$0000                              ; |
+  - LDA.B [_0],Y                              ; |
+    STA.W HW_VMDATA                           ; | \ We rely on having set HW_VMAINC for 2 byte transfers, in ClearOutLayer3.
+    INY                                       ; | |
+    INY                                       ; | /
+    DEX                                       ; |
+    BPL -                                     ; /
     SEP #$30                                  ; AXY->8
+    ; Mode AXY=8
     INC.B _E
     DEC.B _F
-    BPL CODE_00A9A3
+    BPL .LoadOneGfxFile
     STZ.W HW_VMADD                            ; \
-    LDA.B #$60                                ; |Set "Address for VRAM Read/Write" to x6000
+    LDA.B #$60                                ; |Set "Address for VRAM Read/Write" to x6000 (VRam_OBJTiles)
     STA.W HW_VMADD+1                          ; /
-    LDY.B #$00
+    LDY.B #$00                                ; GFX00_Powerups
     JSR UploadGFXFile
     RTS
 
@@ -5400,7 +5424,9 @@ SetallFGBG80:
     BPL -
     RTS
 
+; Called with Y = the GFX file ID to use.
 UploadGFXFile:
+    ; Mode AXY=8
     JSL PrepareGraphicsFile
     CPY.B #$01
     BNE +
@@ -5410,6 +5436,7 @@ UploadGFXFile:
     JSL PrepareGraphicsFile
     LDY.B #$01
   + REP #$20                                  ; A->16
+    ; Mode A=16 XY=8
     LDA.W #$0000
     LDX.W ObjectTileset                       ; LDX Tileset
     CPX.B #$11                                ; CPX #$11
@@ -5417,20 +5444,21 @@ UploadGFXFile:
     CPY.B #$08                                ; if Y = #$08 skip to JSR
     BEQ JumpTo_____
 CODE_00AA90:
-    CPY.B #$1E                                ; If Y = #$1E then
+    CPY.B #$1E                                ; If Y = #$1E (GFX1E_OELevelIcons?) then
     BEQ JumpTo_____                           ; JMP otherwise
     BNE +                                     ; don't JMP
 JumpTo_____:
     JMP FilterSomeRAM
 
-  + STA.B _A
+.MundanePath:
+  + STA.B _A                                  ; _A = 0
     LDA.W #$FFFF
     CPY.B #$01
     BEQ +
     CPY.B #$17
     BEQ +
     LDA.W #$0000
-  + STA.W GfxBppConvertFlag
+  + STA.W GfxBppConvertFlag                   ; GfxBppConvertFlag = 0000 or FFFF.
     LDY.B #$7F
 CODE_00AAAE:
     LDA.W GfxBppConvertFlag
@@ -5452,30 +5480,44 @@ CODE_00AAC8:
     STA.B _A
 CODE_00AACD:
     LDX.B #$07
-  - LDA.B [_0]
-    STA.W HW_VMDATA
-    XBA
-    ORA.B [_0]
-    STA.W GfxBppConvertBuffer,X
+  - LDA.B [_0]                                ; _0 = $7EAD00, holds decompressed tiles after PrepareGraphicsFile.
+    STA.W HW_VMDATA                           ; Write the first word of the first tile to VRAM.
+    XBA                                       ; Swap word endianness.
+    ORA.B [_0]                                ; OR the high and low bytes together, copy into both halves of Acc.
+    STA.W GfxBppConvertBuffer,X               ; store it in a convert buffer.
     INC.B _0
-    INC.B _0
+    INC.B _0                                  ; Move to the next word of the tile.
     DEX
-    BPL -
-    LDX.B #$07
+    BPL -                                     ; Do this endianness-swap-or thing for the first 8 words.
+
+    LDX.B #$07                                ; For the next 8 somethings (not necessarily words, though they might be, sort-of?)...
   - LDA.B [_0]
     AND.W #$00FF
-    STA.B _C
+    STA.B _C                                  ; _C = the low byte of the tile word.
     LDA.B [_0]
-    XBA
-    ORA.W GfxBppConvertBuffer,X
-    AND.B _A
-    ORA.B _C
-    STA.W HW_VMDATA
+    XBA                                       ; Take the endian-swapped tile word,
+    ORA.W GfxBppConvertBuffer,X               ; OR it with the equivalent mangled word from the *previous*... tile? Tile part?
+    AND.B _A                                  ; _A is either 0000 or FF00? So we either zero the whole Acc or just the low byte.
+    ORA.B _C                                  ; And now we restore the original low byte from *this* tile/tile part.
+    STA.W HW_VMDATA                           ; Write the result to VRAM.
+    ; Crucially: here we only move into the decompressed tile data by one byte.
+    ; Even though we have been writing words to VRAM, and previously we moved by a whole word.
+    ; Are we doing some kind of sliding window thing? What on earth?
     INC.B _0
     DEX
     BPL -
     DEY
-    BPL CODE_00AAAE
+    BPL CODE_00AAAE                           ; Doing this whole shebang 127 (0x7F) times. Normally (eg GFX28_HUDTiles) a GFX
+                                              ; file uncompresses to 2048 bytes, which is enough for 32 tiles of 8x8 @4bpp.
+                                              ; We know that in one instance, UploadGFXFile is called with GFX00_Powerups, which
+                                              ; uncompresses to 3072 bytes -- 1.5x the normal.
+                                              ; How does this relate? Is it sprite gfx (larger) vs BG gfx (smaller)?
+                                              ;
+                                              ; Maybe it's sprite graphics. Above, the first 8 words of the gfx are written to
+                                              ; VRAM unaltered. The next 8 words written to VRAM are based on the next 8 *bytes*
+                                              ; of the next gfx (matching that 1.5x discrepancy), and some aspect of the previous gfx.
+                                              ; So maybe these sprite graphics store a "plain" sprite normally, then some sort of
+                                              ; variant sprite encoded as a delta?
     SEP #$20                                  ; A->8
     RTS
 
@@ -5585,7 +5627,7 @@ CODE_00ABC4:
     RTS
 
 
-DATA_00ABD3:
+PaletteOffsetLookup:
     db $00,$18,$30,$48,$60,$78,$90,$A8        ; Offsets for FG, BG, Sprite Palettes
 
     db $00,$14,$28,$3C                        ; Offsets for The End Palettes??
@@ -5594,17 +5636,23 @@ DATA_00ABDF:
     dw $0000,$0038,$0070,$00A8                ; Offsets for Overworld Palettes
     dw $00E0,$0118,$0150
 
+; -------------
+; Set SpritePalette then call this.
+; -------------
 LoadPalette:
     REP #$30                                  ; AXY->16
+    ; Mode AXY=16
     LDA.W #$7FDD                              ; \
-    STA.B _4                                  ; |Set color 1 in all object palettes to white
-    LDX.W #$0002                              ; |
+    STA.B _4                                  ; |Set color 1 in all object palettes to off-white (~8bit RGB EFF7FF)
+    LDX.W #$0002                              ; |I would call these the BG palettes.
     JSR LoadCol8Pal                           ; /
+
     LDA.W #$7FFF                              ; \
-    STA.B _4                                  ; |Set color 1 in all sprite palettes to white
-    LDX.W #$0102                              ; |
+    STA.B _4                                  ; |Set color 1 in all sprite palettes to white (8bit RGB FFFFFF)
+    LDX.W #$0102                              ; |I would call these the OBJ palettes.
     JSR LoadCol8Pal                           ; /
-    LDA.W #StatusBarColors                    ; \
+
+    LDA.W #StatusBarColors                    ; \ Data for 16 colours
     STA.B _0                                  ; |
     LDA.W #$0010                              ; |Load colors 8-16 in the first two object palettes from 00/B170
     STA.B _4                                  ; |(Layer 3 palettes)
@@ -5613,7 +5661,8 @@ LoadPalette:
     LDA.W #$0001                              ; |
     STA.B _8                                  ; |
     JSR LoadColors                            ; /
-    LDA.W #StandardColors                     ; \
+
+    LDA.W #StandardColors                     ; \ Data for 60 colours
     STA.B _0                                  ; |
     LDA.W #$0084                              ; |Load colors 2-7 in palettes 4-D from 00/B250
     STA.B _4                                  ; |(Object and sprite palettes)
@@ -5622,18 +5671,20 @@ LoadPalette:
     LDA.W #$0009                              ; |
     STA.B _8                                  ; |
     JSR LoadColors                            ; /
+
     LDA.W BackAreaColor                       ; \
     AND.W #$000F                              ; |
     ASL A                                     ; |Load background color
     TAY                                       ; |
-    LDA.W BackAreaColors,Y                    ; |
+    LDA.W BackAreaColors,Y                    ; | Data for 8 colours
     STA.W BackgroundColor                     ; /
-    LDA.W #ForegroundPalettes                 ; \Store base address in $00, ...
-    STA.B _0                                  ; /
+
+    LDA.W #ForegroundPalettes                 ; \ Data for 96 colours. 12 colours per set of alternatives.
+    STA.B _0                                  ; /Store base address in $00, ...
     LDA.W ForegroundPalette                   ; \...get current object palette, ...
     AND.W #$000F                              ; /
     TAY                                       ; \
-    LDA.W DATA_00ABD3,Y                       ; |
+    LDA.W PaletteOffsetLookup,Y               ; |
     AND.W #$00FF                              ; |...use it to figure out where to load from, ...
     CLC                                       ; |
     ADC.B _0                                  ; |...add it to the base address...
@@ -5645,12 +5696,13 @@ LoadPalette:
     LDA.W #$0001                              ; |
     STA.B _8                                  ; |
     JSR LoadColors                            ; /
-    LDA.W #SpriteColors                       ; \Store base address in $00, ...
-    STA.B _0                                  ; /
+
+    LDA.W #SpriteColors                       ; \ Data for 84 or 96 colours. 12 colours per set of alternatives.
+    STA.B _0                                  ; /Store base address in $00, ...
     LDA.W SpritePalette                       ; \...get current sprite palette, ...
     AND.W #$000F                              ; /
     TAY                                       ; \
-    LDA.W DATA_00ABD3,Y                       ; |
+    LDA.W PaletteOffsetLookup,Y               ; |
     AND.W #$00FF                              ; |...use it to figure out where to load from, ...
     CLC                                       ; |
     ADC.B _0                                  ; |...add it to the base address...
@@ -5662,12 +5714,13 @@ LoadPalette:
     LDA.W #$0001                              ; |
     STA.B _8                                  ; |
     JSR LoadColors                            ; /
-    LDA.W #BackgroundPalettes                 ; \Store bade address in $00, ...
-    STA.B _0                                  ; /
+
+    LDA.W #BackgroundPalettes                 ; \ Data for 96 colours total. 12 colours per set of alternatives.
+    STA.B _0                                  ; /Store base address in $00, ...
     LDA.W BackgroundPalette                   ; \...get current background palette, ...
     AND.W #$000F                              ; /
     TAY                                       ; \
-    LDA.W DATA_00ABD3,Y                       ; |
+    LDA.W PaletteOffsetLookup,Y               ; |
     AND.W #$00FF                              ; |...use it to figure out where to load from, ...
     CLC                                       ; |
     ADC.B _0                                  ; |...add it to the base address...
@@ -5679,7 +5732,8 @@ LoadPalette:
     LDA.W #$0001                              ; |
     STA.B _8                                  ; |
     JSR LoadColors                            ; /
-    LDA.W #BerryColors                        ; \
+
+    LDA.W #BerryColors                        ; \ Data for 21 colours total.
     STA.B _0                                  ; |
     LDA.W #$0052                              ; |
     STA.B _4                                  ; |
@@ -5688,7 +5742,8 @@ LoadPalette:
     LDA.W #$0002                              ; |
     STA.B _8                                  ; |
     JSR LoadColors                            ; /
-    LDA.W #BerryColors                        ; \
+
+    LDA.W #BerryColors                        ; \ Data for 21 colours total.
     STA.B _0                                  ; |
     LDA.W #$0132                              ; |
     STA.B _4                                  ; |
@@ -5700,32 +5755,51 @@ LoadPalette:
     SEP #$30                                  ; AXY->8
     RTS
 
+; ----------
+; Load a colour into the same slot in 8 consecutive palettes.
+; For palettes that comprise 16 colour slots.
+;
+; Store in _4: the 2 byte colour definition to load.
+; Store in X: the byte offset into `MainPalette` corresponding to the slot in the first palette.
+; ----------
 LoadCol8Pal:
+    ; Mode AXY=16
     LDY.W #$0007
   - LDA.B _4
     STA.W MainPalette,X
     TXA
     CLC
-    ADC.W #$0020
+    ADC.W #$0020                              ; X += 32 (skip 16 colours).
     TAX
     DEY
     BPL -
     RTS
 
+; ---------
+; Load a stream of colours into 1 or more consecutive palettes, optionally skipping some
+; slots in each destination palette.
+; For palettes that comprise 16 colour slots.
+;
+; Store in _0: the start address of the source colour definitions.
+; Store in _4: the byte offset into `MainPalette` corresponding to a slot in the first palette.
+; Store in _6: the number of colours to load into each palette, minus one.
+; Store in _8: the number of consecutive palettes to load into, minus one.
+; ---------
 LoadColors:
-    LDX.B _4
-    LDY.B _6
-  - LDA.B (_0)
-    STA.W MainPalette,X
+    ; Mode AXY=16
+    LDX.B _4                                  ; X = offset into `MainPalette`
+    LDY.B _6                                  ; Y = colours per palette
+  - LDA.B (_0)                                ; A = a colour definition
+    STA.W MainPalette,X                       ; Write the first colour
     INC.B _0
-    INC.B _0
-    INX
+    INC.B _0                                  ; Move to the next src colour
+    INX                                       ; Move to the next dst colour
     INX
     DEY
     BPL -
     LDA.B _4
     CLC
-    ADC.W #$0020
+    ADC.W #$0020                              ; _4 += 32 (skip 16 colours, moving to next palette).
     STA.B _4
     DEC.B _8
     BPL LoadColors
@@ -5861,30 +5935,33 @@ CODE_00AE15:
     RTS
 
 
-DATA_00AE41:
+DATA_ComponentShiftDistance:                  ; How many bits to right-shift away, to access the R/G/B components.
     db $00,$05,$0A
-DATA_00AE44:
-    db $20,$40,$80
+DATA_ComponentIndicatorBit:                   ; Which MSB to set when writing an R/G/B component to HW_COLDATA.
+    db !HW_COL_Red,!HW_COL_Green,!HW_COL_Blue
 
-CODE_00AE47:
+; Upload the BackgroundColor to the PPU as the colour math fixed colour.
+UploadBackgroundColor:
+    ; Mode AXY=8
     LDX.B #$02
-CODE_00AE49:
+.GetNextComponent:
     REP #$20                                  ; A->16
-    LDA.W BackgroundColor
-    LDY.W DATA_00AE41,X
-CODE_00AE51:
+    ; Mode A=16 XY=8
+    LDA.W BackgroundColor                     ; A = background colour.
+    LDY.W DATA_ComponentShiftDistance,X       ; Y = 10, then 5, then 0.
+.IsolateComponent:
     DEY
-    BMI CODE_00AE57
-    LSR A
-    BRA CODE_00AE51
-
-CODE_00AE57:
+    BMI .UploadComponent
+    LSR A                                     ; Right-shift away 10 bits, then 5, then 0.
+    BRA .IsolateComponent                     ; This isolates the blue, green, red components.
+.UploadComponent:
     SEP #$20                                  ; A->8
-    AND.B #$1F
-    ORA.W DATA_00AE44,X
-    STA.W HW_COLDATA
+    ; Mode AXY=8
+    AND.B #$1F                                ; A B/G/R component is 5 bits.
+    ORA.W DATA_ComponentIndicatorBit,X        ; Set a bit to indicate which component is being written.
+    STA.W HW_COLDATA                          ; Update the PPU fixed colour data.
     DEX
-    BPL CODE_00AE49
+    BPL .GetNextComponent
     RTS
 
 
@@ -6124,43 +6201,43 @@ Return00B090:
 
     %insert_empty($11,$0F,$36,$1D,$1B)
 
-BackAreaColors:
-    %incpal("col/misc/back_area.pal")
+BackAreaColors:                               ; 8 colours total
+    %incpal("col/misc/back_area.pal")         ; 8 colours
 
-BackgroundPalettes:
-    %incpal("col/lvl/bg_00.pal")
-    %incpal("col/lvl/bg_01.pal")
-    %incpal("col/lvl/bg_02.pal")
-    %incpal("col/lvl/bg_03.pal")
-    %incpal("col/lvl/bg_04.pal")
-    %incpal("col/lvl/bg_05.pal")
-    %incpal("col/lvl/bg_06.pal")
-    %incpal("col/lvl/bg_07.pal")
+BackgroundPalettes:                           ; 96 colours total
+    %incpal("col/lvl/bg_00.pal")              ; 12 colours
+    %incpal("col/lvl/bg_01.pal")              ; 12 colours
+    %incpal("col/lvl/bg_02.pal")              ; 12 colours
+    %incpal("col/lvl/bg_03.pal")              ; 12 colours
+    %incpal("col/lvl/bg_04.pal")              ; 12 colours
+    %incpal("col/lvl/bg_05.pal")              ; 12 colours
+    %incpal("col/lvl/bg_06.pal")              ; 12 colours
+    %incpal("col/lvl/bg_07.pal")              ; 12 colours
 
-StatusBarColors:
-    %incpal("col/misc/status_bar.pal")
+StatusBarColors:                              ; 16 colours total
+    %incpal("col/misc/status_bar.pal")        ; 16 colours
 
-ForegroundPalettes:
-    %incpal("col/lvl/fg_00.pal")
-    %incpal("col/lvl/fg_01.pal")
-    %incpal("col/lvl/fg_02.pal")
-    %incpal("col/lvl/fg_03.pal")
-    %incpal("col/lvl/fg_04.pal")
-    %incpal("col/lvl/fg_05.pal")
-    %incpal("col/lvl/fg_06.pal")
-    %incpal("col/lvl/fg_07.pal")
+ForegroundPalettes:                           ; 96 colours total
+    %incpal("col/lvl/fg_00.pal")              ; 12 colours
+    %incpal("col/lvl/fg_01.pal")              ; 12 colours
+    %incpal("col/lvl/fg_02.pal")              ; 12 colours
+    %incpal("col/lvl/fg_03.pal")              ; 12 colours
+    %incpal("col/lvl/fg_04.pal")              ; 12 colours
+    %incpal("col/lvl/fg_05.pal")              ; 12 colours
+    %incpal("col/lvl/fg_06.pal")              ; 12 colours
+    %incpal("col/lvl/fg_07.pal")              ; 12 colours
 
-StandardColors:
-    %incpal("col/lvl/std_04.pal")
-    %incpal("col/lvl/std_05.pal")
-    %incpal("col/lvl/std_06.pal")
-    %incpal("col/lvl/std_07.pal")
-    %incpal("col/lvl/std_08.pal")
-    %incpal("col/lvl/std_09.pal")
-    %incpal("col/lvl/std_0A.pal")
-    %incpal("col/lvl/std_0B.pal")
-    %incpal("col/lvl/std_0C.pal")
-    %incpal("col/lvl/std_0D.pal")
+StandardColors:                               ; 60 colours total
+    %incpal("col/lvl/std_04.pal")             ; 6 colours
+    %incpal("col/lvl/std_05.pal")             ; 6 colours
+    %incpal("col/lvl/std_06.pal")             ; 6 colours
+    %incpal("col/lvl/std_07.pal")             ; 6 colours
+    %incpal("col/lvl/std_08.pal")             ; 6 colours
+    %incpal("col/lvl/std_09.pal")             ; 6 colours
+    %incpal("col/lvl/std_0A.pal")             ; 6 colours
+    %incpal("col/lvl/std_0B.pal")             ; 6 colours
+    %incpal("col/lvl/std_0C.pal")             ; 6 colours
+    %incpal("col/lvl/std_0D.pal")             ; 6 colours
 
 PlayerColors:
     %incpal("col/misc/mario_normal.pal")
@@ -6168,16 +6245,16 @@ PlayerColors:
     %incpal("col/misc/mario_fire.pal")
     %incpal("col/misc/luigi_fire.pal")
 
-SpriteColors:
-    %incpal("col/lvl/spr_00.pal")
-    %incpal("col/lvl/spr_01.pal")
-    %incpal("col/lvl/spr_02.pal")
-    %incpal("col/lvl/spr_03.pal")
-    %incpal("col/lvl/spr_04.pal")
-    %incpal("col/lvl/spr_05.pal")
-    %incpal("col/lvl/spr_06.pal")
+SpriteColors:                                 ; 84 or 96 colours total
+    %incpal("col/lvl/spr_00.pal")             ; 12 colours
+    %incpal("col/lvl/spr_01.pal")             ; 12 colours
+    %incpal("col/lvl/spr_02.pal")             ; 12 colours
+    %incpal("col/lvl/spr_03.pal")             ; 12 colours
+    %incpal("col/lvl/spr_04.pal")             ; 12 colours
+    %incpal("col/lvl/spr_05.pal")             ; 12 colours
+    %incpal("col/lvl/spr_06.pal")             ; 12 colours
 BowserEndPalette:
-    %incpal("col/lvl/spr_07.pal")
+    %incpal("col/lvl/spr_07.pal")             ; 12 colours
 
 OverworldColors:
     %incpal("col/ow/YI_normal.pal")
@@ -6225,10 +6302,10 @@ IggyLarryPlatColors:
 BigCrusherColors:
     %incpal("col/misc/castle_crusher.pal")
 
-BerryColors:
-    %incpal("col/misc/berry_red.pal")
-    %incpal("col/misc/berry_pink.pal")
-    %incpal("col/misc/berry_green.pal")
+BerryColors:                                  ; 21 colours total
+    %incpal("col/misc/berry_red.pal")         ; 7 colours
+    %incpal("col/misc/berry_pink.pal")        ; 7 colours
+    %incpal("col/misc/berry_green.pal")       ; 7 colours
 
 BowserColors:
     %incpal("col/misc/bowser.pal")
@@ -6396,7 +6473,7 @@ GraphicsUncompress_Command001:
     BNE -
     BRA GraphicsUncompress_ReadChunkHeader
 
-; Command 001 "word repeat"
+; Command 010 "word repeat"
 ; The command is followed by two bytes.
 ; Write the first byte, write the second byte, write the first byte...
 ; until length+1 bytes have been written.

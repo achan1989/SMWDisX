@@ -1056,7 +1056,7 @@ ORG $0001FF
 ; ~240 bytes available before Bad Things(TM) happen
 StackStart: skip 1
 
-; === $7E0200 ===
+; === $7E0200 - 7E0400 ===
 ; 512 bytes
 ; a work RAM buffer of Object Attribute Memory (OAM)
 ; table 1: object position, tile, and attributes
@@ -2285,22 +2285,49 @@ SampleTable:
 
 ORG $000000
 
+; === $0000 - 07FF ===
 VRam_M7Tilemap:
 VRam_L1Tiles:
 VRam_L2Tiles:
 VRam_GFX_FG1: skip 2048
+
+; === $0800 - 0FFF ===
 VRam_GFX_FG2: skip 2048
+
+; === $1000 - 17FF ===
 VRam_GFX_BG1: skip 2048
+
+; === $1800 - 1FFF ===
 VRam_GFX_FG3: skip 2048
+
+; === $2000 - 2FFF ===
 VRam_L1Tilemap: skip 4096
+
+; === $3000 - 3FFF ===
 VRam_L2Tilemap: skip 4096
+
+; === $4000 - 45FF ===
 VRam_L3Tiles: skip 1536
+
+; === $4600 - 4FFF ===
 VRam_CreditsLetters: skip 2560
+
+; === $5000 - 57FF ===
 VRam_L3Tilemap: skip 2048
+
+; === $5800 - 5FFF ===
 VRam_L1Mode7Tilemap: skip 2048
+
+; === $6000 - 67FF ===
 VRam_OBJTiles:
 VRam_GFX_SP1: skip 2048
+
+; === $6800 - 6FFF ===
 VRam_GFX_SP2: skip 2048
+
+; === $7000 - 77FF ===
 VRam_L1Mode7Tiles:
 VRam_GFX_SP3: skip 2048
+
+; === $7800 - ???? ===
 VRam_GFX_SP4:
