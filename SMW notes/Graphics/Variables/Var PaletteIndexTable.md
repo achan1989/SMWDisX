@@ -5,4 +5,4 @@
 * `PaletteTableUse_Copy` -- TBD
 * `PaletteTableUse_Main` -- TBD
 
-I think it resets to `PaletteTableUse_Dynamic` in each NMI, and the dynamic table gets cleared. See [[UploadPaletteTableToCGRAM]].
+I think it resets to `PaletteTableUse_Dynamic` in each NMI, and the dynamic table gets cleared. See [[UploadDynamicPalettesAndBackgroundColor]].

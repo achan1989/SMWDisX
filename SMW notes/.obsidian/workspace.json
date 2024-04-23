@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+                "file": "NMI/Normal NMI.md",
                 "mode": "source",
                 "backlinks": true,
                 "source": true
@@ -27,7 +27,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Graphics/Variables/Var BackgroundColor.md",
+                "file": "NMI/Common NMI entry.md",
                 "mode": "source",
                 "backlinks": true,
                 "source": true
@@ -46,7 +46,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+                "file": "NMI/Normal NMI.md",
                 "mode": "preview",
                 "backlinks": true,
                 "source": true
@@ -120,7 +120,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+                "file": "NMI/Normal NMI.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -137,7 +137,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+                "file": "NMI/Normal NMI.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               }
@@ -160,7 +160,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Graphics/Functions/UploadPaletteTableToCGRAM.md"
+                "file": "NMI/Normal NMI.md"
               }
             }
           }
@@ -183,18 +183,19 @@
   },
   "active": "2bad102710cb9d38",
   "lastOpenFiles": [
+    "NMI/Common NMI entry.md",
+    "NMI/Normal NMI.md",
+    "Unsorted vars/Var IRQNMICommand.md",
     "Graphics/Variables/Var BackgroundColor.md",
-    "Graphics/Functions/UploadPaletteTableToCGRAM.md",
+    "Graphics/Functions/UploadDynamicPalettesAndBackgroundColor.md",
     "Graphics/Variables/Var PaletteIndexTable.md",
     "Graphics/Functions/LoadPalette.md",
-    "NMI/Normal NMI.md",
     "Graphics/Functions/UploadPalettesToCGRAM.md",
     "Unsorted vars",
     "Graphics/Graphics info.md",
     "Startup sequence.md",
     "Unsorted vars/Var LagFlag.md",
     "Game modes/GM00LoadPresents.md",
-    "NMI/Common NMI entry.md",
     "Graphics/Functions/SetUpScreen.md",
     "Game modes/GM01Presents.md",
     "NMI",
