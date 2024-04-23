@@ -894,6 +894,7 @@ DATA_0C9560:
     dl OWLayer2Tilemap+$400
     dw $0400
 
+; Something to do with updating the BG during the credits?
 CODE_0C9567:
     SEP #$30                                  ; AXY->8
     PHB

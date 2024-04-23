@@ -244,7 +244,7 @@ RegularLevelNMI:                              ; For IRQNMI_Standard, IRQNMI_Cuts
     LDA.B #!HW_BG_BG3Pri|!HW_BG_Mode1         ;\ Mode 1 with layer 3 priority.
     STA.W HW_BGMODE                           ;/
     LDA.B LagFlag                             ;\
-    BEQ +                                     ;| If the game is lagging, skip updating stuff like sprite OAM and controller data.
+    BEQ .NotLagging                           ;| If the game is lagging, skip updating stuff like sprite OAM and controller data.
     LDA.W IRQNMICommand                       ;| If in a special level, skip updating layer positions too.
     LSR A                                     ;|
     BEQ NotSpecialLevelNMI                    ;/
@@ -253,51 +253,61 @@ RegularLevelNMI:                              ; For IRQNMI_Standard, IRQNMI_Cuts
 .NotLagging:
     ; Mode AXY=8
   + INC.B LagFlag                             ; Allow the game loop to run after NMI.
-    JSR UploadPaletteTableToCGRAM             ; Upload palette to CGRAM.
-    LDA.W IRQNMICommand                       ;\\
-    LSR A                                     ;|| Skip down if not either in a regular level, loading message (MARIO START), title screen, or castle cutscene.
-    BNE CODE_008222                           ;|/
-    BCS +                                     ;|\ Draw status bar if in a regular level.
-    JSR DrawStatusBar                         ;|/
+    JSR UploadDynamicPalettesAndBackgroundColor  ; Upload palette to CGRAM.
+    LDA.W IRQNMICommand                       ;\\ Skip down if not either IRQNMI_Standard or IRQNMI_Cutscenes; i.e.
+    LSR A                                     ;|| if not in a regular level, loading message (MARIO START), title screen, or castle cutscene.
+    BNE .OverworldOnly                        ;|/ This means we must be skipping iff IRQNMI_Overworld.
+.IsNotOverworld:                              ;|
+    BCS +                                     ;|\
+    JSR DrawStatusBar                         ;|/ Draw status bar iff in a regular level (IRQNMI_Standard).
   + LDA.W CutsceneID                          ;|\
     CMP.B #!Cutscene_Credits                  ;||
-    BNE CODE_008209                           ;||
+    BNE .IsNotCreditsCutscene                 ;||
+.IsCreditsCutscene:                           ;||
     LDA.W CreditsUpdateBG                     ;|| Handle DMA for the background during the credits staff roll, if applicable.
-    BEQ CODE_00821A                           ;||
+    BEQ .FixGfxClobberedByMarioStart          ;||
     JSL CODE_0C9567                           ;||
-    BRA CODE_00821A                           ;|/
-CODE_008209:                                  ;|
+    BRA .FixGfxClobberedByMarioStart          ;|/
+                                              ;|
+.IsNotCreditsCutscene:                        ;|
+    ; Mode AXY=8                              ;|
     JSL UploadOneMap16Strip                   ;| Update Layer 1/2 tilemaps.
     LDA.W UploadMarioStart                    ;|\
-    BEQ CODE_008217                           ;|| If set to do so, upload graphics for black screen messages (MARIO START/GAME OVER/TIME UP/etc).
-    JSR CODE_00A7C2                           ;||  Then skip way down to the $12 tilemap handling.
-    BRA CODE_00823D                           ;|/
-CODE_008217:                                  ;|
-    JSR CODE_00A390                           ;|
-CODE_00821A:                                  ;|
-    JSR CODE_00A436                           ;| Restore the tiles overwritten by the MARIO START! message, if applicable.
+    BEQ .IsNotMarioStart                      ;|| If set to do so, upload graphics for black screen messages (MARIO START/GAME OVER/TIME UP/etc).
+    JSR UploadGfxForMarioStart                ;||  Then skip way down to the $12 tilemap handling.
+    BRA .NotLagging_CommonEpilogue            ;|/
+                                              ;|
+.IsNotMarioStart:                             ;|
+    JSR UploadAnimatedTilesAndColourFlash     ;|
+.FixGfxClobberedByMarioStart:                 ;|
+    JSR UploadGfxClobberedByMarioStart        ;| Restore the tiles overwritten by the MARIO START! message, if applicable.
     JSR MarioGFXDMA                           ;| Handle DMA for the player/Yoshi/Podoboo tiles.
-    BRA CODE_00823D                           ;/
+    BRA .NotLagging_CommonEpilogue            ;/
 
-CODE_008222:                                  ; On overworld.
+.OverworldOnly:                               ; On overworld.
+    ; Mode AXY=8                              ;
     LDA.W OverworldProcess                    ;\\
     CMP.B #10                                 ;||
-    BNE CODE_008237                           ;||
+    BNE .IsNotOverworldSwap                   ;||
     LDY.W OWSubmapSwapProcess                 ;|| If switching between two submaps on the overworld,
     DEY #2                                    ;||  and currently updating Layer 1, do exactly that.
     CPY.B #$4                                 ;|| Then skip down to controller updating.
-    BCS CODE_008237                           ;||
+    BCS .IsNotOverworldSwap                   ;||
     JSR CODE_00A529                           ;||
     BRA +                                     ;|/
-CODE_008237:                                  ;|
+.IsNotOverworldSwap:                          ;|
     JSR CODE_00A4E3                           ;| Upload overworld animated tile graphics and animated palettes.
     JSR MarioGFXDMA                           ;/ Handle DMA for the player/Yoshi/Podoboo tiles.
-CODE_00823D:                                  ;
+    ; Fallthrough
+
+.NotLagging_CommonEpilogue:
+    ; Mode AXY=8
     JSR LoadScrnImage                         ; Upload tilemap data from $12.
     JSR DoSomeSpriteDMA                       ; Upload OAM.
   + JSR ControllerUpdate                      ; Get controller data.
 
-NotSpecialLevelNMI:                           ; All paths rejoin.
+NotSpecialLevelNMI:                           ; Most paths rejoin (not-lagging, and lagging when not a special level).
+    ; Mode AXY=8                              ;
     LDA.B Layer1XPos                          ;\
     STA.W HW_BG1HOFS                          ;|
     LDA.B Layer1XPos+1                        ;|
@@ -318,21 +328,23 @@ NotSpecialLevelNMI:                           ; All paths rejoin.
     LDA.B Layer2YPos+1                        ;|
     STA.W HW_BG2VOFS                          ;/
     LDA.W IRQNMICommand
-    BEQ CODE_008292
-SpecialLevelNMI:
+    BEQ RegularLevelNMI_StatusBar
+SpecialLevelNMI:                              ; All paths rejoin (lagging and not-lagging).
+    ; Mode AXY=8
     LDA.B #!HW_TIMEN_NMI|!HW_TIMEN_JoyRead
     LDY.W CutsceneID
     CPY.B #8
     BNE NotCredits
+.IsCreditsCutscene:
     LDY.W Brightness
     STY.W HW_INIDISP
     LDY.W HDMAEnable
     STY.W HW_HDMAEN
     JMP IRQNMIEnding
 
-CODE_008292:
+RegularLevelNMI_StatusBar:
     LDY.B #!StatusBarHeight                   ;\ How many scanlines the status bar uses in general.
-CODE_008294:                                  ;|
+NMI_EnableStatusBar:                          ;|
     LDA.W HW_TIMEUP                           ;|
     STY.W HW_VTIME                            ;| Enable IRQ #1 on this scanline, for the status bar.
     STZ.W HW_VTIME+1                          ;|
@@ -348,7 +360,7 @@ NotCredits:
     STA.W HW_INIDISP
     LDA.W HDMAEnable
     STA.W HW_HDMAEN
-    REP #$30
+    REP #$30                                  ; AXY->16
     PLB
     PLY
     PLX
@@ -363,10 +375,10 @@ Mode7NMI:                                     ; NMI for Mode 7 rooms.
     INC.B LagFlag                             ;
     LDA.W UploadMarioStart                    ;\
     BEQ CODE_0082D4                           ;| If set to do so, upload tiles for the MARIO START/TIME UP/GAME OVER messages.
-    JSR CODE_00A7C2                           ;|  Then skip down to drawing the status bar.
+    JSR UploadGfxForMarioStart                ;|  Then skip down to drawing the status bar.
     BRA CODE_0082E8                           ;/
 CODE_0082D4:
-    JSR CODE_00A436                           ; Restore the tiles overwritten by the MARIO START! message, if applicable.
+    JSR UploadGfxClobberedByMarioStart        ; Restore the tiles overwritten by the MARIO START! message, if applicable.
     JSR MarioGFXDMA                           ; Handle DMA for the player/Yoshi/Podoboo tiles.
     BIT.W IRQNMICommand                       ;\
     BVC CODE_0082E8                           ;|
@@ -376,7 +388,7 @@ CODE_0082D4:
     BCS +                                     ;|
 CODE_0082E8:                                  ;|
     JSR DrawStatusBar                         ;/
-  + JSR UploadPaletteTableToCGRAM             ; Upload palette to CGRAM.
+  + JSR UploadDynamicPalettesAndBackgroundColor  ; Upload palette to CGRAM.
     JSR LoadScrnImage                         ; Upload tilemap data from $12.
     JSR DoSomeSpriteDMA                       ; Upload OAM.
     JSR ControllerUpdate                      ; Get controller data.
@@ -435,7 +447,7 @@ Mode7Lagging:                                 ; Transfer various RAM mirrors to 
     CMP.B #!RoyMortonCeilingHeight            ;|
     BNE +                                     ;|
     LDY.B #!StatusBarHeight+9                 ;/ Scanline the status bar ends at in Morton/Roy's rooms.
-  + JMP CODE_008294                           ; Prepare IRQ, and set up a couple more registers.
+  + JMP NMI_EnableStatusBar                   ; Prepare IRQ, and set up a couple more registers.
 
 I_IRQ:                                        ; IRQ routine.
     SEI                                       ; Set Interrupt flag so routine can start
@@ -1513,7 +1525,8 @@ StaticBarDMASettings:
     %DMASettings(!HW_DMA_2Byte2Addr,HW_VMDATA,StatusBarRow4,2*!WidthOfItemBox)
 
 DrawStatusBar:                                ; Routine to upload the status bar tilemap from RAM to VRAM.
-    STZ.W HW_VMAINC                           ;\
+    ; Mode AXY=8
+    STZ.W HW_VMAINC                           ;\  !HW_VINC_IncOnLo | !HW_VINC_IncBy1
     LDA.B #!VRAMAddrHUD2                      ;|
     STA.W HW_VMADD                            ;|
     LDA.B #!VRAMAddrHUD2>>8                   ;|
@@ -4611,69 +4624,96 @@ MarioGFXDMA:
     SEP #$20                                  ; A->8
     RTS
 
-CODE_00A390:
+; Something during NMI when IRQNMI_Standard or IRQNMI_Cutscenes, but not the credits cutscene?
+UploadAnimatedTilesAndColourFlash:
     REP #$20                                  ; A->16
-    LDY.B #$80
+    ; Mode A=16 XY=8
+    LDY.B !HW_VINC_IncOnHi | !HW_VINC_IncBy1
     STY.W HW_VMAINC
-    LDA.W #$1801
-    STA.W HW_DMAPARAM+$20
+    LDA.W #$1801                              ;\ DMA cfg: !HW_DMA_AtoB | !HW_DMA_ABusInc | !HW_DMA_2Byte2Addr
+    STA.W HW_DMAPARAM+$20                     ;/ DMA dst: HW_VMDATA
     LDY.B #$7E
-    STY.W HW_DMAADDR+$22
-    LDX.B #$04
-    LDA.W Gfx33DestAddrC
-    BEQ +
-    STA.W HW_VMADD
+    STY.W HW_DMAADDR+$22                      ; DMA src: 7E_????
+    LDX.B #$04                                ; DMA will be channel 2.
+.TransferC:
+    LDA.W Gfx33DestAddrC                      ; Something to do with an animated tile?
+    BEQ .TransferB                            ; If C doesn't need doing, skip to B.
+    STA.W HW_VMADD                            ; VRAM dst: Gfx33DestAddrC
     LDA.W Gfx33SrcAddrC
-    STA.W HW_DMAADDR+$20
+    STA.W HW_DMAADDR+$20                      ; DMA src: 7E_<Gfx33SrcAddrC>
     LDA.W #$0080
-    STA.W HW_DMACNT+$20
-    STX.W HW_MDMAEN
+    STA.W HW_DMACNT+$20                       ; DMA len: 128 bytes
+    STX.W HW_MDMAEN                           ; Do the DMA transfer, channel 2.
+.TransferB:
   + LDA.W Gfx33DestAddrB
-    BEQ +
-    STA.W HW_VMADD
+    BEQ .TransferA_Check                      ; If B doesn't need doing, skip to A.
+    STA.W HW_VMADD                            ; VRAM dst: Gfx33DestAddrB
     LDA.W Gfx33SrcAddrB
-    STA.W HW_DMAADDR+$20
+    STA.W HW_DMAADDR+$20                      ; DMA src: 7E_<Gfx33SrcAddrB>
     LDA.W #$0080
-    STA.W HW_DMACNT+$20
-    STX.W HW_MDMAEN
+    STA.W HW_DMACNT+$20                       ; DMA len: 128 bytes
+    STX.W HW_MDMAEN                           ; Do the DMA transfer, channel 2.
+.TransferA_Check:
   + LDA.W Gfx33DestAddrA
-    BEQ CODE_00A418
-    STA.W HW_VMADD
+    BEQ UploadFlashColour_Default             ; If A doesn't need doing, skip to the next part.
+    STA.W HW_VMADD                            ; VRAM dst: Gfx33DestAddrA
     CMP.W #$0800
-    BEQ CODE_00A3F0
+    BEQ .TransferA_Split
+.TransferA_Normal:
     LDA.W Gfx33SrcAddrA
-    STA.W HW_DMAADDR+$20
+    STA.W HW_DMAADDR+$20                      ; DMA src: 7E_<Gfx33SrcAddrA>
     LDA.W #$0080
-    STA.W HW_DMACNT+$20
-    STX.W HW_MDMAEN
-    BRA CODE_00A418
-
-CODE_00A3F0:
-    LDA.W Gfx33SrcAddrA
-    STA.W HW_DMAADDR+$20
+    STA.W HW_DMACNT+$20                       ; DMA len: 128 bytes
+    STX.W HW_MDMAEN                           ; Do the DMA transfer, channel 2.
+    BRA UploadFlashColour_Default
+.TransferA_Split:                             ; Special case. When Transfer A dst is VRAM 0x800, write
+    LDA.W Gfx33SrcAddrA                       ; half the data to 0x800 and half to 0x900.
+    STA.W HW_DMAADDR+$20                      ; DMA src: 7E_<Gfx33SrcAddrA>
     LDA.W #$0040
-    STA.W HW_DMACNT+$20
-    STX.W HW_MDMAEN
+    STA.W HW_DMACNT+$20                       ; DMA len: 64 bytes
+    STX.W HW_MDMAEN                           ; Do the DMA transfer, channel 2.
     LDA.W #$0900
-    STA.W HW_VMADD
+    STA.W HW_VMADD                            ; VRAM dst: 0x900 (TBD what/why this is)
     LDA.W Gfx33SrcAddrA
     CLC
     ADC.W #$0040
-    STA.W HW_DMAADDR+$20
+    STA.W HW_DMAADDR+$20                      ; DMA src: 7E_<Gfx33SrcAddrA + 64 bytes>
     LDA.W #$0040
-    STA.W HW_DMACNT+$20
-    STX.W HW_MDMAEN
-CODE_00A418:
+    STA.W HW_DMACNT+$20                       ; DMA len: 64 bytes
+    STX.W HW_MDMAEN                           ; Do the DMA transfer, channel 2.
+    ; Fall through to UploadFlashColour_Default
+
+; ------------------
+; Upload a colour to animate a flashing over time.
+; Use the default colour (yellow).
+; Upload to the default colour entry (TBD).
+; ------------------
+UploadFlashColour_Default:
     SEP #$20                                  ; A->8
+    ; Mode AXY=8
     LDA.B #$64
-CODE_00A41C:
+; ------------------
+; Upload a colour to animate a flashing over time.
+; Use the default colour (yellow).
+; Call with A = the CGRAM word address to store the colour.
+; ------------------
+UploadFlashColour_CustomDst:
     STZ.B _0
-CODE_00A41E:
-    STA.W HW_CGADD
-    LDA.B EffFrame
-    AND.B #$1C
-    LSR A
-    ADC.B _0
+; ------------------
+; Upload a colour to animate a flashing over time.
+; Call with _0 = 0 for a yellow flash, or _0 = 0x10 for a red flash.
+; Call with A = the CGRAM word address to store the colour.
+;
+; The colour within the animation cycle is based on the current frame number, and changes every
+; 12 frames.
+; ------------------
+UploadFlashColour_AllCustom:
+    ; Mode AXY=8
+    STA.W HW_CGADD                            ; CGRAM word dst = A parameter.
+    LDA.B EffFrame                            ;\
+    AND.B #$1C                                ;| Choose the byte offset within the colour sequence,
+    LSR A                                     ;/ based on the current frame number.
+    ADC.B _0                                  ; Choose the sequence to use (yellow or red).
     TAY
     LDA.W FlashingColors,Y
     STA.W HW_CGDATA
@@ -4681,7 +4721,7 @@ CODE_00A41E:
     STA.W HW_CGDATA
     RTS
 
-CODE_00A436:
+UploadGfxClobberedByMarioStart:
     LDA.W MarioStartFlag
     BEQ +
     STZ.W MarioStartFlag
@@ -4718,7 +4758,7 @@ DATA_PaletteTableLookup:
 
 ; Upload the contents of the dynamic palette table to CGRAM, if the table is in use.
 ; Upload the BackgroundColor to the PPU as the colour math fixed colour.
-UploadPaletteTableToCGRAM:
+UploadDynamicPalettesAndBackgroundColor:
     ; Mode AXY=8
     LDY.W PaletteIndexTable
     LDX.W DATA_PaletteTableLookup+2,Y         ;  X = bank number of the chosen palette table.
@@ -4798,11 +4838,11 @@ CODE_00A4E3:
     CMP.B #$0A
     BEQ -
     LDA.B #$6D
-    JSR CODE_00A41C
+    JSR UploadFlashColour_CustomDst
     LDA.B #$10
     STA.B _0
     LDA.B #$7D
-    JMP CODE_00A41E
+    JMP UploadFlashColour_AllCustom
 
 
 DATA_00A521:
@@ -4913,7 +4953,7 @@ CODE_00A5F9:
     LDA.B #$E7
     TRB.B EffFrame
   - JSL CODE_05BB39
-    JSR CODE_00A390
+    JSR UploadAnimatedTilesAndColourFlash
     INC.B EffFrame
     LDA.B EffFrame
     AND.B #$07
@@ -5137,7 +5177,8 @@ CODE_00A7B9:
     SEP #$20                                  ; A->8
     RTS
 
-CODE_00A7C2:
+; Upload graphics for black screen messages (MARIO START/GAME OVER/TIME UP/etc)?
+UploadGfxForMarioStart:
     REP #$20                                  ; A->16
     LDX.B #$80
     STX.W HW_VMAINC
@@ -6287,9 +6328,9 @@ OverworldLightning:
 OverworldHudColors:
     %incpal("col/ow/border.pal")
 
-FlashingColors:
-    %incpal("col/misc/flashing_yellow.pal")
-    %incpal("col/misc/flashing_red.pal")
+FlashingColors:                               ; 16 colours total
+    %incpal("col/misc/flashing_yellow.pal")   ; 8 colours
+    %incpal("col/misc/flashing_red.pal")      ; 8 colours
 
 TitleScreenColors:
     %incpal("col/misc/title_screen.pal")

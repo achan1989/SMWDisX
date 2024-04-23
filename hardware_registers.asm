@@ -918,7 +918,7 @@ HW_CNTRL3: skip 2
 
 ; === $00421E ===
 ; 2 bytes
-; controller data for player 2 (port 2, Data1)
+; controller data for player 4 (port 2, Data2)
 ; byetudlraxLRxxxx
 ; ||||||||||||++++ controller signature
 ; ||||||||||++---- L and R shoulder buttons
