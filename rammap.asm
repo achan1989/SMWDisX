@@ -2089,8 +2089,11 @@ skip 1
 ORG $7E2000
 
 NonMirroredWRAM:
+; 7E2000 - 7E7CFF
 MarioGraphics: skip 23808
+; 7E7D00 - 7EB8FF
 AnimatedTiles: skip 15360
+; 7EB900 - TBD
 Layer2TilemapLow:
 SwitchAniXPosHigh: skip 40
 SwitchAniYPosHigh: skip 40
@@ -2121,11 +2124,15 @@ ORG $7F0000
 OWEventTilemap: skip 3328
 ; 7F0D00 - 7F3FFF unused
 skip 13056
+; 7F4000 - 7F7FFF
 OWLayer2Tilemap: skip 16384
+; 7F8000 - 7F8182
 OAMResetRoutine: skip 387
 ; 7F8183 - 7F837A unused
 skip 504
+; 7F837B
 DynStripeImgSize: skip 2
+; 7F837D - 7F868C(?)
 DynamicStripeImage:
 ; 7F868D - 7F977A unused
 

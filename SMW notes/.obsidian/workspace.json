@@ -8,51 +8,38 @@
         "type": "tabs",
         "children": [
           {
-            "id": "2bad102710cb9d38",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "NMI/Normal NMI.md",
-                "mode": "source",
-                "backlinks": true,
-                "source": true
-              }
-            },
-            "group": "eb0ee0d473125f98"
-          },
-          {
             "id": "0b73ca138cb9c80e",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "NMI/Common NMI entry.md",
+                "file": "Graphics/Functions/LoadLayer3Graphics.md",
                 "mode": "source",
                 "backlinks": true,
                 "source": true
               }
-            }
+            },
+            "group": "d4bf621821190743"
           }
         ]
       },
       {
-        "id": "6567f907ddfabc3f",
+        "id": "59f0e6c807db8deb",
         "type": "tabs",
         "children": [
           {
-            "id": "64410687912f8d8f",
+            "id": "2c54a3e7e160617d",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "NMI/Normal NMI.md",
+                "file": "Graphics/Functions/LoadLayer3Graphics.md",
                 "mode": "preview",
                 "backlinks": true,
                 "source": true
               }
             },
-            "group": "eb0ee0d473125f98"
+            "group": "d4bf621821190743"
           }
         ]
       }
@@ -120,7 +107,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "NMI/Normal NMI.md",
+                "file": "Graphics/Functions/LoadLayer3Graphics.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -137,7 +124,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "NMI/Normal NMI.md",
+                "file": "Graphics/Functions/LoadLayer3Graphics.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               }
@@ -160,7 +147,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "NMI/Normal NMI.md"
+                "file": "Graphics/Functions/LoadLayer3Graphics.md"
               }
             }
           }
@@ -181,27 +168,28 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "2bad102710cb9d38",
+  "active": "0b73ca138cb9c80e",
   "lastOpenFiles": [
-    "NMI/Common NMI entry.md",
-    "NMI/Normal NMI.md",
-    "Unsorted vars/Var IRQNMICommand.md",
-    "Graphics/Variables/Var BackgroundColor.md",
+    "Graphics/Functions/LoadStripeImage.md",
+    "Game modes/GM01Presents.md",
+    "Graphics/Graphics info.md",
     "Graphics/Functions/UploadDynamicPalettesAndBackgroundColor.md",
-    "Graphics/Variables/Var PaletteIndexTable.md",
     "Graphics/Functions/LoadPalette.md",
     "Graphics/Functions/UploadPalettesToCGRAM.md",
+    "Graphics/Functions/LoadLayer3Graphics.md",
+    "Graphics/Variables/Var PaletteIndexTable.md",
+    "Graphics/Functions/OAMResetRoutine.md",
+    "NMI/Normal NMI.md",
+    "NMI/Common NMI entry.md",
+    "Unsorted vars/Var IRQNMICommand.md",
+    "Graphics/Variables/Var BackgroundColor.md",
     "Unsorted vars",
-    "Graphics/Graphics info.md",
     "Startup sequence.md",
     "Unsorted vars/Var LagFlag.md",
     "Game modes/GM00LoadPresents.md",
     "Graphics/Functions/SetUpScreen.md",
-    "Game modes/GM01Presents.md",
     "NMI",
     "Var PotatoThing.md",
-    "Graphics/Functions/OAMResetRoutine.md",
-    "Graphics/Functions/LoadLayer3Graphics.md",
     "Graphics/Variables",
     "Graphics/Functions",
     "Game modes",

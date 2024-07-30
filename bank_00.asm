@@ -47,6 +47,7 @@ I_RESET:
     INC.B LagFlag                             ;
 
 GameLoop:                                     ; Main game loop.
+    ; Mode AXY=8
     LDA.B LagFlag                             ;\ Wait for NMI before executing next frame.
     BEQ GameLoop                              ;/
     CLI                                       ; Enable interrupts.
@@ -567,6 +568,7 @@ WaitForHBlank:                                ;|
 DoSomeSpriteDMA:                              ; Routine to upload sprite OAM to the registers.
     STZ.W HW_DMAPARAM                         ; Use DMA channel 0; increment, one register write once.
     REP #$20                                  ; A->16
+    ; Mode A=16 XY=8
     STZ.W HW_OAMADD                           ; Clear the sprite OAM index.
     LDA.W #(OAMMirror<<8)|(HW_OAMDATA&$FF)    ;\
     STA.W HW_DMAREG                           ;| Set channel 0's destination to $2104 (data for OAM write)
@@ -577,6 +579,7 @@ DoSomeSpriteDMA:                              ; Routine to upload sprite OAM to 
     LDY.B #!Ch0                               ;\ Begin DMA transfer on channel 0.
     STY.W HW_MDMAEN                           ;/
     SEP #$20                                  ; A->8
+    ; Mode AXY=8
     LDA.B #!HW_OAM_SetPriority                ;\ Set OAM object priority bit.
     STA.W HW_OAMADD+1                         ;/
     LDA.B OAMAddress                          ;\ Set OAM index to $3F.
@@ -746,6 +749,7 @@ OtherStripes:
     dl IggyCutBGStripe                        ; JAB/UFF - Iggy, Morton, Roy Castle Cutscene BG
 
 LoadScrnImage:                                ; Routine to upload a stripe image to VRAM (usually layer 3).
+    ; Mode AXY=8
     LDY.B StripeImage
     LDA.W StripeImages,Y
     STA.B _0
@@ -764,23 +768,24 @@ LoadScrnImage:                                ; Routine to upload a stripe image
     RTS
 
 ClearOutLayer3:                               ; DMA upload routine to clean out the layer 3 tilemap.
+    ; Mode AXY=8
     JSR TurnOffIO                             ;
     LDA.B #!EmptyTile                         ;\ Tile to use as the blank tile.
     STA.B _0                                  ;/
-    STZ.W HW_VMAINC                           ;] Single byte VRAM upload.
+    STZ.W HW_VMAINC                           ;] Single byte VRAM upload (low byte).
     STZ.W HW_VMADD                            ;\
     LDA.B #VRam_L3Tilemap>>8                  ;| Upload tilemap to Layer 3.
     STA.W HW_VMADD+1                          ;/
     LDX.B #6                                  ;\ Set up and enable DMA on channel 1.
   - LDA.W ClearTilemapDMAData,X               ;| $4310: Fixed transfer, one register write once.
     STA.W HW_DMAPARAM+$10,X                   ;| $4311: Destination is $2118 (VRAM low byte).
-    DEX                                       ;| $4312: Source is $000000.
+    DEX                                       ;| $4312: Source is _0 ($000000).
     BPL -                                     ;| $4315: Write x1000 bytes.
     LDY.B #!Ch1                               ;|
     STY.W HW_MDMAEN                           ;/
     LDA.B #!EmptyTile>>8                      ;\ YXPCCCTT to use for the blank tile.
     STA.B _0                                  ;/
-    LDA.B #!HW_VINC_IncOnHi                   ;\ Two byte VRAM upload.
+    LDA.B #!HW_VINC_IncOnHi                   ;\ Single byte VRAM upload (high byte).
     STA.W HW_VMAINC                           ;/
     STZ.W HW_VMADD                            ;\
     LDA.B #VRam_L3Tilemap>>8                  ;| Upload tilemap to Layer 3.
@@ -817,6 +822,7 @@ ControllerUpdate:                             ; Routine to read controller data 
     AND.W byetudlrP1Hold                      ;||
     STA.W byetudlrP1Frame                     ;||
     STY.W byetudlrP1Mask                      ;//
+
     LDA.W HW_CNTRL2                           ;\\
     AND.B #!ButA|!ButX|!ButL|!ButR            ;|| Get controller 2 data 2.
     STA.W axlr0000P2Hold                      ;|/
@@ -832,6 +838,7 @@ ControllerUpdate:                             ; Routine to read controller data 
     AND.W byetudlrP2Hold                      ;||
     STA.W byetudlrP2Frame                     ;||
     STY.W byetudlrP2Mask                      ;//
+
     LDX.W ControllersPresent                  ;\
     BPL +                                     ;| If $0DA0 is set to use separate controllers, use the current player number as the controller port to accept input from.
     LDX.W PlayerTurnLvl                       ;/
@@ -900,74 +907,90 @@ ExecutePtrLong:                               ; Routine to jump to a 24-bit addr
     LDY.B _5
     JML.W [_0]
 
-LoadStripeImage:                              ; Subroutine to upload a specific Layer 3 tilemap (pointer in $00) to VRAM.
+; Subroutine to upload a specific Layer 3 tilemap to VRAM.
+;
+; _0 holds the 3 byte pointer to the desired tilemap.
+; A holds the bank byte (same as _2).
+LoadStripeImage:
+    ; Mode AXY=8
     REP #$10                                  ; XY->16
-    STA.W HW_DMAADDR+2+$10                    ;
+    ; Mode A=8 XY=16
+    STA.W HW_DMAADDR+2+$10                    ; src bank = _2
     LDY.W #0                                  ;
   - LDA.B [_0],Y                              ;\ Branch if bit 7 isn't set (i.e. end of data).
     BPL +                                     ;/
     SEP #$30                                  ; AXY->8
+    ; Mode AXY=8
     RTS                                       ;
                                               ;
+    ; Mode A=8 XY=16
   + STA.B _4                                  ;\
     INY                                       ;|
     LDA.B [_0],Y                              ;|
     STA.B _3                                  ;| $03/$04 = VRAM destination
-    INY                                       ;| $07 = direction (0 = horz, 1 = vert)
-    LDA.B [_0],Y                              ;|
+    INY                                       ;| $07 bit 0 = direction (0 = horz, 1 = vert)
+    LDA.B [_0],Y                              ;|             comes from high bit of input[2]
     STZ.B _7                                  ;|
     ASL A                                     ;|
     ROL.B _7                                  ;/
-    LDA.B #HW_VMDATA                          ;\ Set register to $2118.
+    LDA.B #HW_VMDATA                          ;\ DMA dst=VRAM (via $2118: VMDATAL then VMDATAH).
     STA.W HW_DMAREG+$10                       ;/
     LDA.B [_0],Y                              ;\
     AND.B #%01000000                          ;|
-    LSR #3                                    ;| Enable RLE if applicable.
-    STA.B _5                                  ;|
-    STZ.B _6                                  ;|
-    ORA.B #!HW_DMA_2Byte2Addr                 ;|
+    LSR #3                                    ;| LSR A three times
+    STA.B _5                                  ;| Enable RLE if applicable.
+    STZ.B _6                                  ;| _5/_6 = all zeros, except RLE bit at bit 3
+    ORA.B #!HW_DMA_2Byte2Addr                 ;| HW_DMA_2Byte2Addr and don't increment A bus if RLE.
     STA.W HW_DMAPARAM+$10                     ;/
     REP #$20                                  ; A->16
-    LDA.B _3                                  ;\ Set destination.
+    ; Mode AXY=16
+    LDA.B _3                                  ;\ Set VRAM destination.
     STA.W HW_VMADD                            ;/
-    LDA.B [_0],Y                              ;\
-    XBA                                       ;|
+    LDA.B [_0],Y                              ;\ A = input[2], input[3]
+    XBA                                       ;| A = input[3], input[2]
     AND.W #%0011111111111111                  ;|
     TAX                                       ;|
-    INX                                       ;|
-    INY #2                                    ;| Set data source and length.
-    TYA                                       ;|
+    INX                                       ;| X = length + 1
+    INY #2                                    ;| Y = input data index
+    TYA                                       ;| A = input data index
     CLC                                       ;|
-    ADC.B _0                                  ;|
-    STA.W HW_DMAADDR+$10                      ;|
-    STX.W HW_DMACNT+$10                       ;/
+    ADC.B _0                                  ;| A = address of input data
+    STA.W HW_DMAADDR+$10                      ;| DMA src = A
+    STX.W HW_DMACNT+$10                       ;/ DMA byte count = length + 1
     LDA.B _5                                  ;\
     BEQ +                                     ;|
+.YesRLE:                                      ;|
     SEP #$20                                  ;| A->8
-    LDA.B _7                                  ;|
-    STA.W HW_VMAINC                           ;|
+    ; Mode A=8 XY=16                          ;|
+    LDA.B _7                                  ;| $07 bit 0 = direction (0 = horz, 1 = vert)
+    STA.W HW_VMAINC                           ;| HW_VINC_IncOnLo and either inc by 1 or 32
     LDA.B #!Ch1                               ;|
-    STA.W HW_MDMAEN                           ;|
-    LDA.B #HW_VMDATA+1                        ;|
+    STA.W HW_MDMAEN                           ;| Run DMA now
+                                              ;|
+    LDA.B #HW_VMDATA+1                        ;| DMA dst=VRAM (via $2119: VMDATAH then M7SEL).
     STA.W HW_DMAREG+$10                       ;| Set up RLE if applicable.
     REP #$21                                  ;| A->16, CLC
+    ; Mode AXY=16                             ;|
     LDA.B _3                                  ;|
-    STA.W HW_VMADD                            ;|
+    STA.W HW_VMADD                            ;| Re-set VRAM destination.
     TYA                                       ;|
     ADC.B _0                                  ;|
     INC A                                     ;|
-    STA.W HW_DMAADDR+$10                      ;|
-    STX.W HW_DMACNT+$10                       ;/
+    STA.W HW_DMAADDR+$10                      ;| DMA src = address of input data + 1
+    STX.W HW_DMACNT+$10                       ;/ DMA byte count = length + 1
     LDX.W #2                                  ;
-  + STX.B _3                                  ;
-    TYA                                       ;
+.NoRLE:
+    ; Mode AXY=16
+  + STX.B _3                                  ; _3 = length + 1 (or 2 if fallthrough from RLE)
+    TYA                                       ; A = input data index
     CLC                                       ;
     ADC.B _3                                  ;
-    TAY                                       ;
+    TAY                                       ; Y = input data index + length + 1 (move to next header)
     SEP #$20                                  ; A->8
-    LDA.B _7                                  ;\
+    ; Mode A=8 XY=16
+    LDA.B _7                                  ;\ $07 bit 0 = direction (0 = horz, 1 = vert)
     ORA.B #!HW_VINC_IncOnHi                   ;| Set direction.
-    STA.W HW_VMAINC                           ;/
+    STA.W HW_VMAINC                           ;/ HW_VINC_IncOnHi and either inc by 1 or 32
     LDA.B #!Ch1                               ;\ Enable DMA on channel 1.
     STA.W HW_MDMAEN                           ;/
     JMP -                                     ;
@@ -2078,6 +2101,7 @@ MainPaletteDMAData:
     %DMASettings(!HW_DMA_1Byte1Addr,HW_CGDATA,MainPalette,$0200)
 
 WindowDMASetup:                               ; Routine to initialize window HDMA at power on.
+    ; Mode AXY=8
     LDX.B #4                                  ; Index for DMA set up
   - LDA.W WindowDMAData,X                     ;\ Set up DMA settings for $4370-$4374.
     STA.W HW_DMAPARAM+$70,X                   ;|  (controls, destination, source)
@@ -2090,6 +2114,7 @@ DisableHDMA:
     STZ.W HDMAEnable                          ; Disable HDMA.
 ClearWindowHDMA:                              ; Subroutine to reset the HDMA table.
     REP #$10                                  ; XY->16
+    ; Mode A=8 XY=16
     LDX.W #2*(!ScreenHeight-1)                ;\
     LDA.B #$FF                                ;|
   - STA.W WindowTable,X                       ;| Initialize entries in the HDMA table to #$FF00.
@@ -2098,19 +2123,21 @@ ClearWindowHDMA:                              ; Subroutine to reset the HDMA tab
     DEX                                       ;|
     BPL -                                     ;/
     SEP #$10                                  ; XY->8
+    ; Mode AXY=8
     RTS                                       ;
 
 
 WindowDMAData:
+    ; In each scanline will write a byte to HW_WH0 and a byte to HW_WH1.
     %HDMASettings(!HW_DMA_HDMAIndirect|!HW_DMA_2Byte2Addr,HW_WH0,WindowDMASizes)
 
 WindowDMASizes:
 if ver_is_lores(!_VER)                        ;\================ J, U, SS, & E0 ===============
-    db !ScreenHeight+16                       ;! Screen is split into two halves
-    dw WindowTable                            ;! Each 112 lines long
-    db !ScreenHeight+16                       ;! The C bit is set, so there's a word of data per
-    dw WindowTable+!ScreenHeight              ;! line (write a word from an increasing index in
-    db 0                                      ;! the table every scanline).
+    db (!ScreenHeight/2)|(1<<7)               ;! Screen is split into two halves, because !ScreenHeight doesn't fit into 7 bits.
+    dw WindowTable                            ;! So each half is 112 lines long.
+    db (!ScreenHeight/2)|(1<<7)               ;! The C bit is set and !HW_DMA_2Byte2Addr, so WindowTable holds a word of data
+    dw WindowTable+!ScreenHeight              ;! (two table rows of one byte each) per scanline. Each scanline the HDMA copies
+    db 0                                      ;! 1 byte each from WindowTable[idx] and WindowTable[idx+1], then increases idx by 2.
 else                                          ;<======================= E1 ====================
     db !ScreenHeight+8                        ;! Screen is split into two halves
     dw WindowTable                            ;! Each $F8 lines long
@@ -2196,6 +2223,7 @@ CreditsHDMAData:
 
 
 RunGameMode:
+    ; Mode AXY=8
     LDA.W GameMode                            ; Load game mode
     JSL ExecutePtr
 
@@ -2243,6 +2271,7 @@ RunGameMode:
     dw GM29TheEnd                             ; 29 - the end screen
 
 TurnOffIO:                                    ; Subroutine to turn off the screen while loading.
+    ; Mode AXY=8
     STZ.W HW_NMITIMEN                         ; Disable interupts.
     STZ.W HW_HDMAEN                           ; Disable HDMA.
     LDA.B #!HW_DISP_FBlank                    ;\ Force blank (turn the screen off).
@@ -2256,6 +2285,7 @@ NintendoTile:                                 ; Tilemap for the "Nintendo Presen
     db $02,$04,$06,$08
 
 GM00LoadPresents:                             ; Game Mode 00 - Load Nintendo Presents
+    ; Mode AXY=8
     JSR ClearOutLayer3                        ; Clean out Layer 3.
     JSR SetUpScreen                           ; Set up various registers (screen mode, CGADDSUB, windows...).
     JSR LoadLayer3Graphics                    ; Load Layer 3 GFX (text tiles?)
@@ -2278,7 +2308,7 @@ GM00LoadPresents:                             ; Game Mode 00 - Load Nintendo Pre
     STA.W SPCIO3                              ;/
     LDA.B #!NintendoPresentsTimer             ;
     STA.W VariousPromptTimer                  ;
-CODE_0093CA:                                  ;
+CODE_0093CA:                                  ; Load palettes and initialize screen settings.
     LDA.B #%00001111                          ;\ Set brightness to max
     STA.W Brightness                          ;/
     LDA.B #1                                  ;
@@ -2313,6 +2343,7 @@ ScreenSettings:                               ; Subroutine to upload settings to
     RTS                                       ;
 
 GM01Presents:                                 ; Game Mode 01 - Nintendo Presents logo
+    ; Mode AXY=8
     DEC.W VariousPromptTimer                  ;\ Return if not time for the logo to fade away.
     BNE FinishGameMode                        ;/
     JSR CODE_00B888                           ; Decompress GFX32/GFX33.
@@ -4361,8 +4392,8 @@ CODE_00A11B:
     JSR LoadScrnImage
     JSL CODE_048D91
     JSL CODE_04D6E9
-    LDA.B #$F0
-    STA.B OAMAddress
+    LDA.B #120*2
+    STA.B OAMAddress                          ; Highest priority is OAM slot 120.
     JSR ConsolidateOAM
     JSR LoadScrnImage
     STZ.W OverworldProcess
@@ -4567,7 +4598,9 @@ AdvancePlayerPosition:
     RTS
 
 MarioGFXDMA:
+    ; Mode AXY=8
     REP #$20                                  ; A->16
+    ; Mode A=16 XY=8
     LDX.B #$04                                ; We're using DMA channel 2
     LDY.W PlayerGfxTileCount
     BEQ +
@@ -4582,21 +4615,23 @@ MarioGFXDMA:
     LDA.W #$0014                              ; \ x14 bytes will be transferred
     STA.W HW_DMACNT+$20                       ; /
     STX.W HW_MDMAEN                           ; Transfer the colors
+
   + LDY.B #$80                                ; \ Set VRAM Address Increment Value to x80
-    STY.W HW_VMAINC                           ; /
-    LDA.W #$1801
-    STA.W HW_DMAPARAM+$20
+    STY.W HW_VMAINC                           ; / HW_VINC_IncOnHi | HW_VINC_IncBy1
+    LDA.W #$1801                              ; param = HW_DMA_ABusInc | HW_DMA_2Byte2Addr
+    STA.W HW_DMAPARAM+$20                     ; via PPU 0x2118 HW_VMDATA
     LDA.W #$67F0
-    STA.W HW_VMADD
+    STA.W HW_VMADD                            ; dst = VRAM word 0x67F0, near end of VRam_GFX_SP1
     LDA.W DynGfxTile7FPtr
-    STA.W HW_DMAADDR+$20
+    STA.W HW_DMAADDR+$20                      ; src = *DynGfxTile7FPtr in bank 7E
     LDY.B #$7E                                ; \ Set bank to x7E
     STY.W HW_DMAADDR+$22                      ; /
-    LDA.W #$0020                              ; \ x20 bytes will be transferred
+    LDA.W #$0020                              ; \ x20 (32) bytes will be transferred
     STA.W HW_DMACNT+$20                       ; /
     STX.W HW_MDMAEN                           ; Transfer
+
     LDA.W #$6000                              ; \ Set Address for VRAM Read/Write to x6000
-    STA.W HW_VMADD                            ; /
+    STA.W HW_VMADD                            ; / is start of VRam_GFX_SP1
     LDX.B #$00
   - LDA.W DynGfxTilePtr,X                     ; \ Get address of graphics to copy
     STA.W HW_DMAADDR+$20                      ; /
@@ -4608,6 +4643,7 @@ MarioGFXDMA:
     INX                                       ; /
     CPX.W PlayerGfxTileCount                  ; \ Repeat last segment while X<$0D84
     BCC -                                     ; /
+
     LDA.W #$6100                              ; \ Set Address for VRAM Read/Write to x6100
     STA.W HW_VMADD                            ; /
     LDX.B #$00
@@ -4705,7 +4741,7 @@ UploadFlashColour_CustomDst:
 ; Call with A = the CGRAM word address to store the colour.
 ;
 ; The colour within the animation cycle is based on the current frame number, and changes every
-; 12 frames.
+; 4 frames.
 ; ------------------
 UploadFlashColour_AllCustom:
     ; Mode AXY=8
@@ -4722,30 +4758,32 @@ UploadFlashColour_AllCustom:
     RTS
 
 UploadGfxClobberedByMarioStart:
+    ; Mode AXY=8
     LDA.W MarioStartFlag
     BEQ +
     STZ.W MarioStartFlag
     REP #$20                                  ; A->16
+    ; Mode A=16 XY=8
     LDY.B #$80
-    STY.W HW_VMAINC
+    STY.W HW_VMAINC                           ; HW_VINC_IncOnHi | HW_VINC_IncBy1
     LDA.W #$64A0
-    STA.W HW_VMADD
-    LDA.W #$1801
-    STA.W HW_DMAPARAM+$20
+    STA.W HW_VMADD                            ; dst = vram word 0x64A0, somewhere in VRam_OBJTiles
+    LDA.W #$1801                              ; write via 0x2118 HW_VMDATA
+    STA.W HW_DMAPARAM+$20                     ; param = HW_DMA_ABusInc | HW_DMA_2Byte2Addr
     LDA.W #$0BF6
-    STA.W HW_DMAADDR+$20
+    STA.W HW_DMAADDR+$20                      ; src = 0x0BF6 start of GfxDecompSP1
     LDY.B #$00
     STY.W HW_DMAADDR+$22
     LDA.W #$00C0
-    STA.W HW_DMACNT+$20
+    STA.W HW_DMACNT+$20                       ; size = 0xC0 (192) bytes
     LDX.B #$04
-    STX.W HW_MDMAEN
+    STX.W HW_MDMAEN                           ; Do transfer with channel 2.
     LDA.W #$65A0
-    STA.W HW_VMADD
+    STA.W HW_VMADD                            ; dst = vram word 0x65A0, somewhere in VRam_OBJTiles
     LDA.W #$0CB6
-    STA.W HW_DMAADDR+$20
+    STA.W HW_DMAADDR+$20                      ; src = 0x0CB6 somewhere in GfxDecompSP1
     LDA.W #$00C0
-    STA.W HW_DMACNT+$20
+    STA.W HW_DMACNT+$20                       ; size = 0xC0 (192) bytes
     STX.W HW_MDMAEN
     SEP #$20                                  ; A->8
   + RTS
@@ -5492,6 +5530,7 @@ JumpTo_____:
     JMP FilterSomeRAM
 
 .MundanePath:
+    ; Mode A=16 XY=8
   + STA.B _A                                  ; _A = 0
     LDA.W #$FFFF
     CPY.B #$01
@@ -5501,25 +5540,26 @@ JumpTo_____:
     LDA.W #$0000
   + STA.W GfxBppConvertFlag                   ; GfxBppConvertFlag = 0000 or FFFF.
     LDY.B #$7F
-CODE_00AAAE:
+..loop:
     LDA.W GfxBppConvertFlag
-    BEQ CODE_00AACD
+    BEQ ..delta
     CPY.B #$7E
-    BCC CODE_00AABE
-CODE_00AAB7:
+    BCC ..bravo
+..alpha:
     LDA.W #$FF00
     STA.B _A
-    BNE CODE_00AACD
-CODE_00AABE:
+    BNE ..delta
+..bravo:
     CPY.B #$6E
-    BCC CODE_00AAC8
+    BCC ..charlie
     CPY.B #$70
-    BCS CODE_00AAC8
-    BCC CODE_00AAB7
-CODE_00AAC8:
+    BCS ..charlie
+    BCC ..alpha
+..charlie:
     LDA.W #$0000
     STA.B _A
-CODE_00AACD:
+..delta:
+    ; Mode A=16 XY=8
     LDX.B #$07
   - LDA.B [_0]                                ; _0 = $7EAD00, holds decompressed tiles after PrepareGraphicsFile.
     STA.W HW_VMDATA                           ; Write the first word of the first tile to VRAM.
@@ -5547,8 +5587,9 @@ CODE_00AACD:
     INC.B _0
     DEX
     BPL -
+
     DEY
-    BPL CODE_00AAAE                           ; Doing this whole shebang 127 (0x7F) times. Normally (eg GFX28_HUDTiles) a GFX
+    BPL ..loop                           ; Doing this whole shebang 127 (0x7F) times. Normally (eg GFX28_HUDTiles) a GFX
                                               ; file uncompresses to 2048 bytes, which is enough for 32 tiles of 8x8 @4bpp.
                                               ; We know that in one instance, UploadGFXFile is called with GFX00_Powerups, which
                                               ; uncompresses to 3072 bytes -- 1.5x the normal.
@@ -5562,7 +5603,11 @@ CODE_00AACD:
     SEP #$20                                  ; A->8
     RTS
 
+; Inputs
+; _0 = address of decompressed gfx data
+;
 FilterSomeRAM:
+    ; Mode A=16 XY=8
     LDA.W #$FF00
     STA.B _A
     LDY.B #$7F
@@ -5571,7 +5616,7 @@ Upload____ToVRAM:
     BCS +                                     ; /(Why not just NOPing it out, Nintendo?)
   + LDX.B #$07
   - LDA.B [_0]                                ; \ Okay, so take [$00], store
-    STA.W HW_VMDATA                           ; |it to VRAM, then bitwise
+    STA.W HW_VMDATA                           ; |the word to VRAM, then bitwise
     XBA                                       ; |OR the high and low bytes together
     ORA.B [_0]                                ; |store in both bytes of A
     STA.W GfxBppConvertBuffer,X               ; /and store to $1BB2,x
@@ -5579,6 +5624,7 @@ Upload____ToVRAM:
     INC.B _0                                  ; /
     DEX                                       ; \And continue on another 7 times (or 8 times total)
     BPL -                                     ; /
+
     LDX.B #$07                                ; hm..  It's like a FOR Y{FOR X{ } } thing ...yeah...
   - LDA.B [_0]
     AND.W #$00FF                              ; A normal byte becomes 2 anti-compressed bytes.
@@ -5592,6 +5638,7 @@ Upload____ToVRAM:
     INC.B _0                                  ; I'll have nightmares about this routine for a few years. :(
     DEX
     BPL -                                     ; Ouch.
+
     DEY
     BPL Upload____ToVRAM
     SEP #$20                                  ; A->8
@@ -6368,7 +6415,9 @@ OWSpecialColors:
     dl GFX32&$7FFFFF
 
 CODE_00B888:
+    ; Mode AXY=8
     REP #$10                                  ; XY->16
+    ; Mode A=8 XY=16
     LDY.W #GFX33                              ; \
     STY.B GraphicsCompPtr                     ; |Store the address 08/BFC0 at $8A-$8C
     LDA.B #GFX33>>16&$7F                      ; |
@@ -6377,13 +6426,19 @@ CODE_00B888:
     STY.B _0                                  ; |Store the address 7E/2000 at $00-$02
     LDA.B #MarioGraphics>>16&$7F              ; |
     STA.B _2                                  ; /
-    JSR GraphicsUncompress_EntryB
+    JSR GraphicsUncompress_EntryB             ; Uncompress GFX33 into MarioGraphics
     LDA.B #MarioGraphics>>16&$7F              ; \
     STA.B GraphicsUncompPtr+2                 ; |
     REP #$30                                  ; |AXY->16, Store the address 7E/ACFE at $8D-$8F
-    LDA.W #MarioGraphics+$8CFE                ; |
+    ; Mode AXY=16
+    LDA.W #MarioGraphics+$8CFE                ; | Should really be AnimatedTiles+$2FFE ?
     STA.B GraphicsUncompPtr                   ; /
     LDX.W #$23FF
+; Moving uncompressed gfx from MarioGraphics to somewhere in AnimatedTiles, and
+; transforming some of the data in the process. Until we've consumed all the
+; MarioGraphics data:
+;
+; 8 times: we take an 8-bit src value 0xVV and transform it into a 16-bit dst value 0x00VV ?
 CODE_00B8AD:
     LDY.W #$0008
   - LDA.L MarioGraphics,X
@@ -6395,12 +6450,13 @@ CODE_00B8AD:
     DEY
     BNE -
     LDY.W #$0008
+; 8 times: verbatim copy of a 16-bit value.
 CODE_00B8C4:
     DEX
     LDA.L MarioGraphics,X
     STA.B [GraphicsUncompPtr]
-    DEX
-    BMI GraphicsUncompress_EntryA
+    DEX                                       ; Underflows when we've consumed the last of the src data.
+    BMI GraphicsUncompress_EntryA             ; Not a call! Uncompress GFX32 into MarioGraphics then return out of CODE_00B888.
     DEC.B GraphicsUncompPtr
     DEC.B GraphicsUncompPtr
     DEY
@@ -6409,12 +6465,20 @@ CODE_00B8C4:
 
 GraphicsUncompress_EntryA:
     LDA.W #$8000
-    STA.B GraphicsCompPtr
+    STA.B GraphicsCompPtr                     ; Becomes 0x08/8000 which is GFX32
     SEP #$20                                  ; A->8
 
-; In one example, called with _0 = $7EAD00 and GraphicsCompPtr = GFX28 (i.e. GFX28_HUDTiles).
-; Y will hold the output offset.
+; Uncompress graphics from a source buffer to a destination buffer.
+; Args:
+;   GraphicsCompPtr = address of the source buffer
+;   _0 = address of the destination buffer
+;
+; In one example, it's called with _0 = $7EAD00 and GraphicsCompPtr = GFX28 (i.e. GFX28_HUDTiles).
+; Y is used internally to hold the output offset.
 ; ReadByte reads a byte from GraphicsCompPtr and increments the pointer, stores the byte in A.
+; Note that GraphicsUncompPtr is mis-named! Within this routine it's just scratch space for
+; intermediate values.
+;
 ; Mode AXY=8
 GraphicsUncompress_EntryB:
     REP #$10                                  ; XY->16
